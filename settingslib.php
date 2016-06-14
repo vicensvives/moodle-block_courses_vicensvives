@@ -26,7 +26,7 @@ class courses_vicensvives_setting_wscheck extends admin_setting {
         try {
             $ws->books();
         } catch (vicensvives_ws_error $e) {
-            return html_writer::tag('div', $e->getMessage(), array('class' => 'alert alert-error'));
+            return html_writer::tag('div', $e->getMessage(), array('class' => 'errorbox'));
         }
         return '';
     }

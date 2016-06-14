@@ -186,22 +186,17 @@ class vicensvives_ws {
     }
 
     private function log($method, $path, $params, $status, $response) {
-        global $PAGE, $SCRIPT;
+        global $CFG, $COURSE, $SCRIPT;
 
-        $data = array(
-            'context' => $PAGE->context,
-            'other' => array(
-                'script' => $SCRIPT,
-                'method' => $method,
-                'path' => $path,
-                'params' => $params,
-                'status' => $status,
-                'message' => !empty($response->msg) ? $response->msg : '',
-            ),
-        );
+        $info = strtoupper($method) . ' ' . $path . ' => ' . $status;
+        if ($status != 200 and !empty($response->msg)) {
+            $info .= ' ' . $response->msg;
+        }
+        if (strlen($info) > 255) {
+            $info = substr($info, 0, 252) . '...';
+        }
 
-        $event = \block_courses_vicensvives\event\webservice_called::create($data);
-        $event->trigger();
+        add_to_log($COURSE->id, 'vicensvives', 'webservice', $SCRIPT, $info);
     }
 
     private function refresh_token() {

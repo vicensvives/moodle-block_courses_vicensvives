@@ -118,7 +118,7 @@ try {
 
 } catch (vicensvives_ws_error $e) {
     echo $OUTPUT->header();
-    echo html_writer::tag('p', $e->getMessage(), array('class' => 'alert alert-error'));
+    echo html_writer::tag('div', $e->getMessage(), array('class' => 'errorbox'));
     echo $OUTPUT->footer();
     exit;
 }

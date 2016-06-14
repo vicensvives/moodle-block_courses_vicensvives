@@ -90,6 +90,3 @@ $string['noupdatedunits'] = 'No hay actualizaciones para este libro.';
 // Permisos
 $string['courses_vicensvives:addinstance'] = 'Crear instancia del bloque.';
 $string['courses_vicensvives:myaddinstance'] = 'Crear instancia del bloque en my.';
-
-// Event
-$string['eventwebservicecalled'] = 'Web service llamado';
