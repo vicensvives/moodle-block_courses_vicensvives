@@ -199,26 +199,102 @@ class courses_vicensvives_add_book {
     private function create_mod($item, $section) {
         global $CFG, $DB;
 
+        $module = $DB->get_record('modules', array('name' => $item['modname']), '*', MUST_EXIST);
+        $context = get_context_instance(CONTEXT_COURSE, $this->course->id);
+
+        $modlib = "$CFG->dirroot/mod/$module->name/lib.php";
+        if (file_exists($modlib)) {
+            include_once($modlib);
+        } else {
+            print_error('modulemissingcode', '', '', $modlib);
+        }
+
         $fromform = new stdClass();
-        $fromform->module = $DB->get_field('modules', 'id', array('name' => $item['modname']));
-        $fromform->modulename = $item['modname'];
+        $fromform->course = $this->course->id;
+        $fromform->module = $module->id;
+        $fromform->modulename = $module->name;
         $fromform->visible = true;
-        $fromform->cmidnumber = $item['idnumber'];
         $fromform->name = $item['name'];
         $fromform->intro = $item['name'];
         $fromform->introformat = 0;
-        $fromform->availablefrom = 0;
-        $fromform->availableuntil = 0;
-        $fromform->showavailability = 0;
-        $fromform->conditiongradegroup = array();
-        $fromform->conditionfieldgroup = array();
-        $fromform->conditioncompletiongroup = array();
+        $fromform->groupingid = $this->course->defaultgroupingid;
+        $fromform->groupmembersonly = 0;
+        $fromform->section = $section->section;
+        $fromform->instance = '';
+        $fromform->completion = COMPLETION_DISABLED;
+        $fromform->completionview = COMPLETION_VIEW_NOT_REQUIRED;
+        $fromform->completionusegrade = null;
+        $fromform->completiongradeitemnumber = null;
+        $fromform->groupmode = 0; // Do not set groupmode.
+        $fromform->instance     = '';
+        $fromform->coursemodule = '';
+        $fromform->cmidnumber = $item['idnumber'];
 
         foreach ($item['params'] as $key => $value) {
             $fromform->$key = $value;
         }
 
-        courses_vicensvives_add_moduleinfo($fromform, $this->course, $section);
+        $addinstancefunction    = $fromform->modulename."_add_instance";
+        $updateinstancefunction = $fromform->modulename."_update_instance";
+
+        // first add course_module record because we need the context
+        $newcm = new stdClass();
+        $newcm->course           = $this->course->id;
+        $newcm->module           = $fromform->module;
+        $newcm->instance         = 0; // not known yet, will be updated later (this is similar to restore code)
+        $newcm->visible          = $fromform->visible;
+        $newcm->visibleold       = $fromform->visible;
+        $newcm->groupmode        = $fromform->groupmode;
+        $newcm->groupingid       = $fromform->groupingid;
+        $newcm->groupmembersonly = $fromform->groupmembersonly;
+        $newcm->showdescription = 0;
+
+        if (!$fromform->coursemodule = add_course_module($newcm)) {
+            print_error('cannotaddcoursemodule');
+        }
+
+        $returnfromfunc = $addinstancefunction($fromform, null);
+
+        if (!$returnfromfunc or !is_number($returnfromfunc)) {
+            // undo everything we can
+            $modcontext = get_context_instance(CONTEXT_MODULE, $fromform->coursemodule);
+            delete_context(CONTEXT_MODULE, $fromform->coursemodule);
+            $DB->delete_records('course_modules', array('id'=>$fromform->coursemodule));
+
+            if (!is_number($returnfromfunc)) {
+                print_error('invalidfunction', '', course_get_url($course, $section->section));
+            } else {
+                print_error('cannotaddnewmodule', '', course_get_url($course, $section->section), $fromform->modulename);
+            }
+        }
+
+        $fromform->instance = $returnfromfunc;
+
+        $DB->set_field('course_modules', 'instance', $returnfromfunc, array('id'=>$fromform->coursemodule));
+
+        // course_modules and course_sections each contain a reference
+        // to each other, so we have to update one of them twice.
+        $fromform->id = $fromform->coursemodule;
+
+        $DB->set_field('course_modules', 'section', $section->id, array('id'=>$fromform->coursemodule));
+
+        // make sure visibility is set correctly (in particular in calendar)
+        // note: allow them to set it even without moodle/course:activityvisibility
+        set_coursemodule_visible($fromform->coursemodule, $fromform->visible);
+
+        if (isset($fromform->cmidnumber)) { //label
+            // set cm idnumber - uniqueness is already verified by form validation
+            set_coursemodule_idnumber($fromform->coursemodule, $fromform->cmidnumber);
+        }
+
+        // sync idnumber with grade_item
+        if ($grade_item = grade_item::fetch(array('itemtype'=>'mod', 'itemmodule'=>$fromform->modulename,
+                                                  'iteminstance'=>$fromform->instance, 'itemnumber'=>0, 'courseid'=>$this->course->id))) {
+            if ($grade_item->idnumber != $fromform->cmidnumber) {
+                $grade_item->idnumber = $fromform->cmidnumber;
+                $grade_item->update();
+            }
+        }
 
         return $DB->get_record('course_modules', array('id' => $fromform->coursemodule), '*', MUST_EXIST);
     }
@@ -375,10 +451,9 @@ class courses_vicensvives_add_book {
     private function set_num_sections($sectionnum) {
         global $DB;
 
-        $conditions = array('courseid' => $this->course->id, 'sectionid' => 0, 'name' => 'numsections');
-        $numsections = (int) $DB->get_field('course_format_options', 'value', $conditions);
-        if ($sectionnum > $numsections) {
-            $DB->set_field('course_format_options', 'value', $sectionnum, $conditions);
+        if ($sectionnum > $this->course->numsections) {
+            $this->course->numsections = $sectionnum;
+            $DB->set_field('course', 'numsections', $sectionnum, array('id' => $this->course->id));
         }
     }
 
@@ -449,93 +524,4 @@ class courses_vicensvives_add_book {
             $this->progress->update($this->current, $this->total, $msg);
         }
     }
-}
-
-// Función basa en add_moduleinfo, con estas diferencias:
-//  - Se pasa el registro de sección para evitar consultar la base de datos
-//  - Se ha eliminado código que procesa parámetros no utilitzados
-//  - No se llama rebuild_course_cache (se llama una sola vez al final)
-//  - No se llama grade_regrade_final_grades (se llama una sola vez al final)
-//  - No añade el módulo a la sección, se hace posteriormente
-function courses_vicensvives_add_moduleinfo($moduleinfo, $course, $section) {
-    global $DB, $CFG;
-
-    require_once("$CFG->dirroot/course/modlib.php");
-
-    // Attempt to include module library before we make any changes to DB.
-    include_modulelib($moduleinfo->modulename);
-
-    $moduleinfo->course = $course->id;
-    $moduleinfo = set_moduleinfo_defaults($moduleinfo);
-
-    $moduleinfo->groupmode = 0; // Do not set groupmode.
-
-    // First add course_module record because we need the context.
-    $newcm = new stdClass();
-    $newcm->course           = $course->id;
-    $newcm->module           = $moduleinfo->module;
-    $newcm->instance         = 0; // Not known yet, will be updated later (this is similar to restore code).
-    $newcm->visible          = $moduleinfo->visible;
-    $newcm->visibleold       = $moduleinfo->visible;
-    if (isset($moduleinfo->cmidnumber)) {
-        $newcm->idnumber         = $moduleinfo->cmidnumber;
-    }
-    $newcm->groupmode        = $moduleinfo->groupmode;
-    $newcm->groupingid       = $moduleinfo->groupingid;
-    $newcm->groupmembersonly = $moduleinfo->groupmembersonly;
-    $newcm->showdescription = 0;
-
-    // From this point we make database changes, so start transaction.
-    $transaction = $DB->start_delegated_transaction();
-
-    $newcm->added = time();
-    $newcm->section = $section->id;
-    if (!$moduleinfo->coursemodule = $DB->insert_record("course_modules", $newcm)) {
-        print_error('cannotaddcoursemodule');
-    }
-
-    $addinstancefunction    = $moduleinfo->modulename."_add_instance";
-    try {
-        $returnfromfunc = $addinstancefunction($moduleinfo, null);
-    } catch (moodle_exception $e) {
-        $returnfromfunc = $e;
-    }
-    if (!$returnfromfunc or !is_number($returnfromfunc)) {
-        // Undo everything we can. This is not necessary for databases which
-        // support transactions, but improves consistency for other databases.
-        $modcontext = context_module::instance($moduleinfo->coursemodule);
-        context_helper::delete_instance(CONTEXT_MODULE, $moduleinfo->coursemodule);
-        $DB->delete_records('course_modules', array('id'=>$moduleinfo->coursemodule));
-
-        if ($e instanceof moodle_exception) {
-            throw $e;
-        } else if (!is_number($returnfromfunc)) {
-            print_error('invalidfunction', '', course_get_url($course, $section->section));
-        } else {
-            print_error('cannotaddnewmodule', '', course_get_url($course, $section->section), $moduleinfo->modulename);
-        }
-    }
-
-    $moduleinfo->instance = $returnfromfunc;
-
-    $DB->set_field('course_modules', 'instance', $returnfromfunc, array('id'=>$moduleinfo->coursemodule));
-
-    // Update embedded links and save files.
-    $modcontext = context_module::instance($moduleinfo->coursemodule);
-
-    $hasgrades = plugin_supports('mod', $moduleinfo->modulename, FEATURE_GRADE_HAS_GRADE, false);
-    $hasoutcomes = plugin_supports('mod', $moduleinfo->modulename, FEATURE_GRADE_OUTCOMES, true);
-
-    // Sync idnumber with grade_item.
-    if ($hasgrades && $grade_item = grade_item::fetch(array('itemtype'=>'mod', 'itemmodule'=>$moduleinfo->modulename,
-                 'iteminstance'=>$moduleinfo->instance, 'itemnumber'=>0, 'courseid'=>$course->id))) {
-        if ($grade_item->idnumber != $moduleinfo->cmidnumber) {
-            $grade_item->idnumber = $moduleinfo->cmidnumber;
-            $grade_item->update();
-        }
-    }
-
-    $transaction->allow_commit();
-
-    return $moduleinfo;
 }

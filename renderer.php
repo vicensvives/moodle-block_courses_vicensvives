@@ -64,9 +64,68 @@ class block_courses_vicensvives_renderer extends plugin_renderer_base {
 
     // Esta función es diferente para cada versión de Moodle
     private function get_course_contacts($course) {
-        global $CFG;
-        require_once($CFG->libdir. '/coursecatlib.php');
-        $course = new course_in_list($course);
-        return $course->get_course_contacts();
+        global $CFG, $DB;
+
+        $contacts = array();
+
+        $context = context_course::instance($course->id);
+
+        /// first find all roles that are supposed to be displayed
+        if (!empty($CFG->coursecontact)) {
+            $managerroles = explode(',', $CFG->coursecontact);
+            $namesarray = array();
+            $rusers = array();
+
+            if (!isset($course->managers)) {
+                $rusers = get_role_users($managerroles, $context, true,
+                    'ra.id AS raid, u.id, u.username, u.firstname, u.lastname,
+                     r.name AS rolename, r.sortorder, r.id AS roleid',
+                    'r.sortorder ASC, u.lastname ASC');
+            } else {
+                //  use the managers array if we have it for perf reasosn
+                //  populate the datastructure like output of get_role_users();
+                foreach ($course->managers as $manager) {
+                    $u = new stdClass();
+                    $u = $manager->user;
+                    $u->roleid = $manager->roleid;
+                    $u->rolename = $manager->rolename;
+
+                    $rusers[] = $u;
+                }
+            }
+
+            /// Rename some of the role names if needed
+            if (isset($context)) {
+                $aliasnames = $DB->get_records('role_names', array('contextid'=>$context->id), '', 'roleid,contextid,name');
+            }
+
+            $canviewfullnames = has_capability('moodle/site:viewfullnames', $context);
+            foreach ($rusers as $ra) {
+                if (isset($contacts[$ra->id])) {
+                    //  only display a user once with the higest sortorder role
+                    continue;
+                }
+
+                if (isset($aliasnames[$ra->roleid])) {
+                    $ra->rolename = $aliasnames[$ra->roleid]->name;
+                }
+
+                $fullname = fullname($ra, $canviewfullnames);
+                $contacts[$ra->id] = array(
+                    'rolename' => $ra->rolename,
+                    'username' => fullname($ra, $canviewfullnames),
+                );
+            }
+
+            if (!empty($namesarray)) {
+                $output .= html_writer::start_tag('ul', array('class'=>'unlist vicensvives_course_teachers'));
+                foreach ($namesarray as $name) {
+                    $output .= html_writer::tag('li', $name);
+                }
+                $output .= html_writer::end_tag('ul');
+            }
+        }
+
+        return $contacts;
     }
 }

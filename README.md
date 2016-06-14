@@ -1,5 +1,5 @@
-Bloque de cursos Vicens Vives (Moodle 2.5 y 2.6)
-================================================
+Bloque de cursos Vicens Vives (Moodle 2.3)
+==========================================
 
 Bloque para listar, crear y actualizar cursos a partir de lubros importados del
 web service de Vicens Vives. También permite configurar automáticamente el web
