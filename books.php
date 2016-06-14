@@ -71,14 +71,14 @@ class books_form extends moodleform {
 function str_contains($haystack, $needle) {
     // Normaliza el texto a carñacteres ASCII en mínuscula y sin espacios duplicados
     $normalize = function($text) {
-        $text = core_text::specialtoascii($text);
-        $text = core_text::strtolower($text);
+        $text = textlib::specialtoascii($text);
+        $text = textlib::strtolower($text);
         $text = preg_replace('/\s+/', ' ', trim($text));
         return $text;
     };
     $haystack = $normalize($haystack);
     $needle = $normalize($needle);
-    return core_text::strpos($haystack, $needle) !== false;
+    return textlib::strpos($haystack, $needle) !== false;
 }
 
 require_login(null, false);
@@ -199,7 +199,7 @@ foreach ($filtered_books as $book) {
 
 // Ordenación
 foreach ($table->get_sort_columns() as $column => $order) {
-    core_collator::asort_objects_by_property($rows, $column);
+    collatorlib::asort_objects_by_property($rows, $column);
     if ($order == SORT_DESC) {
         $rows = array_reverse($rows);
     }

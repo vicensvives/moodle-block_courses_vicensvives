@@ -1,4 +1,4 @@
-Bloque de cursos Vicens Vives (Moodle 2.8)
+Bloque de cursos Vicens Vives (Moodle 2.7)
 ==========================================
 
 Bloque para listar, crear y actualizar cursos a partir de lubros importados del

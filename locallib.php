@@ -134,10 +134,6 @@ class courses_vicensvives_add_book {
 
         $this->course = create_course($courseobj);
 
-        $gradecategory = grade_category::fetch_course_category($this->course->id);
-        $gradecategory->aggregation = GRADE_AGGREGATE_MEAN;
-        $gradecategory->update();
-
         $this->update_progress();
 
         return $this->course->id;
@@ -217,7 +213,6 @@ class courses_vicensvives_add_book {
         $fromform->conditiongradegroup = array();
         $fromform->conditionfieldgroup = array();
         $fromform->conditioncompletiongroup = array();
-        $fromform->grade = $CFG->gradepointdefault;
 
         foreach ($item['params'] as $key => $value) {
             $fromform->$key = $value;
@@ -487,7 +482,7 @@ function courses_vicensvives_add_moduleinfo($moduleinfo, $course, $section) {
     }
     $newcm->groupmode        = $moduleinfo->groupmode;
     $newcm->groupingid       = $moduleinfo->groupingid;
-    $newcm->groupmembersonly = !empty($moduleinfo->groupmembersonly);
+    $newcm->groupmembersonly = $moduleinfo->groupmembersonly;
     $newcm->showdescription = 0;
 
     // From this point we make database changes, so start transaction.

@@ -54,6 +54,6 @@ ul.vicensives_newunits {
     font-size: 0.9em;
 }
 
-#page-blocks-courses_vicensvives-addbook .progress .bar {
+#page-blocks-courses_vicensvives-addbook div[id^="progress_pbar_"] {
     transition: none !important;
 }
