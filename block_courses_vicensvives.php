@@ -1,21 +1,36 @@
 <?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 require_once($CFG->dirroot . '/course/lib.php');
 
 class block_courses_vicensvives extends block_list {
-    function init() {
+
+    public function init() {
         $this->title = get_string('pluginname', 'block_courses_vicensvives');
     }
 
-    function instance_allow_multiple() {
+    public function instance_allow_multiple() {
         return false;
     }
 
-    function has_config() {
+    public function has_config() {
         return true;
     }
 
-    function instance_config_save($data, $nolongerused = false) {
+    public function instance_config_save($data, $nolongerused = false) {
         echo "esto no se cuando se ejecuta";die;
         if (empty($data->quizid)) {
             $data->quizid = $this->get_owning_quiz();
@@ -23,10 +38,10 @@ class block_courses_vicensvives extends block_list {
         parent::instance_config_save($data);
     }
 
-    function get_content() {
+    public function get_content() {
         global $CFG, $USER, $DB, $OUTPUT;
 
-        if($this->content !== NULL) {
+        if ($this->content !== null) {
             return $this->content;
         }
 
@@ -35,21 +50,26 @@ class block_courses_vicensvives extends block_list {
         $this->content->icons = array();
         $this->content->footer = '';
 
-        $icon  = '<img src="' . $OUTPUT->pix_url('i/course') . '" class="icon" alt="" />&nbsp;';
+        $icon = $OUTPUT->pix_icon('i/course', '');
 
-        // El profesor ve de sus cursos los filtrados de VV.
-        // Sólo profesores!!
+        // Administradores.
+        if (is_siteadmin()) {
+            $text = get_string('show_courses', 'block_courses_vicensvives');
+            $url = new moodle_url('/blocks/courses_vicensvives/courses.php');
+            $this->content->items[] = html_writer::link($url, $text);
+
+            $text = get_string('addcourse', 'block_courses_vicensvives');
+            $url = new moodle_url('/blocks/courses_vicensvives/books.php');
+            $this->content->items[] = html_writer::link($url, $text);
+
+            return $this->content;
+        }
+
+        // Profesores y gestores
         $contextcat = context_coursecat::instance($CFG->block_courses_vicensvives_defaultcategory);
-//        print_object($contextcat);
-//        print_object(has_capability('moodle/course:create', $context));
-//        echo isloggedin()." and !".isguestuser()." and !".is_siteadmin()." and ".has_capability('moodle/course:create', $context);
-        if (isloggedin() and !isguestuser() and !is_siteadmin()
-            // and !(has_capability('moodle/course:update', context_system::instance()))
-            and has_capability('moodle/course:create', $contextcat)
-        ) {
-            // Just print My Courses.
-
-            if (! $mycourses = enrol_get_my_courses(null, 'visible DESC, fullname ASC') and !has_capability('moodle/course:create', $contextcat)) {
+        if (isloggedin() and !isguestuser()) {
+            $mycourses = enrol_get_my_courses(null, 'visible DESC, fullname ASC');
+            if (!$mycourses and !has_capability('moodle/course:create', $contextcat)) {
                 return $this->content;
             }
 
@@ -60,36 +80,28 @@ class block_courses_vicensvives extends block_list {
             foreach ($courses as $course) {
                 // Falta filtrar VV.
                 $coursecontext = context_course::instance($course->id); // Eliminamos alumnos de esta manera.
-                if (has_capability('moodle/course:update', $coursecontext) && $i < $CFG->block_courses_vicensvives_maxcourses ) {
+                if (has_capability('moodle/course:update', $coursecontext) and $i < $CFG->block_courses_vicensvives_maxcourses) {
                     $linkcss = $course->visible ? "" : " class=\"dimmed\" ";
-                    $this->content->items[]="<a $linkcss title=\"" . format_string($course->shortname, true, array('context' => $coursecontext)) . "\" ".
-                               "href=\"$CFG->wwwroot/course/view.php?id=$course->id\">".$icon.format_string($course->fullname). "</a>";
+                    $text = $icon . ' ' . format_string($course->shortname, true, array('context' => $coursecontext));
+                    $url = new moodle_url('/course/view.php', array('id' => $course->id));
+                    $attributes = array('class' => $course->visible ? '' : 'dimmed');
+                    $this->content->items[] = html_writer::link($url, $text, $attributes);
                     $i++;
                 } else if ($i >= $CFG->block_courses_vicensvives_maxcourses) {
-                    $this->content->items[]="<a title=\"".get_string('show_more', 'block_courses_vicensvives')."\" ".
-                        "href=\"$CFG->wwwroot/blocks/courses_vicensvives/courses.php\">".get_string('show_more', 'block_courses_vicensvives')."</a>";
+                    $text = get_string('show_more', 'block_courses_vicensvives');
+                    $url = new moodle_url('/blocks/courses_vicensvives/courses.php');
+                    $this->content->items[] = html_writer::link($url, $text);
                     break;
                 }
             }
+
             if (has_capability('moodle/course:create', $contextcat)) {
-            $this->content->footer = "<a title=\"".get_string('addcourse', 'block_courses_vicensvives')."\" ".
-                "href=\"$CFG->wwwroot/blocks/courses_vicensvives/books.php\">".get_string('addcourse', 'block_courses_vicensvives')."</a>";
+                $text = get_string('addcourse', 'block_courses_vicensvives');
+                $url = new moodle_url('/blocks/courses_vicensvives/books.php');
+                $this->content->items[] = html_writer::link($url, $text);
             }
 
-            $this->title = get_string('pluginname', 'block_courses_vicensvives');
-//            if ($this->content->items) { // make sure we don't return an empty list.
-                return $this->content;
-//            }
-        }
-        // Administradores.
-        if (is_siteadmin()
-            // and has_capability('moodle/course:update', context_system::instance())
-        ) {
-            $this->content->items[]="<a title=\"".get_string('show_courses', 'block_courses_vicensvives')."\" ".
-                "href=\"$CFG->wwwroot/blocks/courses_vicensvives/courses.php\">".get_string('show_courses', 'block_courses_vicensvives')."</a>";
-
-            $this->content->items[]="<a title=\"".get_string('addcourse', 'block_courses_vicensvives')."\" ".
-                               "href=\"$CFG->wwwroot/blocks/courses_vicensvives/books.php\">".get_string('addcourse', 'block_courses_vicensvives')."</a>";
+            return $this->content;
         }
 
         return $this->content;

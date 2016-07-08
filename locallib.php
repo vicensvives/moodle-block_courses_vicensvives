@@ -14,28 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Authentication Plugin:
- *
- * Checks against an external database.
- *
- * @package    courses_vicensvives
- * @author     CV&A Consulting
- * @license    http://www.gnu.org/copyleft/gpl.html GNU Public License
- */
-
 require_once($CFG->dirroot.'/blocks/courses_vicensvives/lib/vicensvives.php');
 require_once($CFG->dirroot.'/course/lib.php');
 require_once($CFG->libdir.'/gradelib.php');
 
 class courses_vicensvives_add_book {
 
-    var $book;
-    var $progress;
-    var $current = 0;
-    var $total;
-    var $course;
-    var $updatedunits = array();
+    private $book;
+    private $progress;
+    private $current = 0;
+    private $total;
+    private $course;
+    private $updatedunits = array();
 
     private function __construct($bookid, $course, progress_bar $progress) {
         $this->course = $course;
@@ -52,17 +42,17 @@ class courses_vicensvives_add_book {
         $this->update_progress();
     }
 
-    static function create($bookid, progress_bar $progress=null) {
+    public static function create($bookid, $format, progress_bar $progress=null) {
         $addbook = new self($bookid, null, $progress);
-        $courseid = $addbook->create_course();
+        $courseid = $addbook->create_course($format);
         $addbook->create_course_content();
         return $courseid;
     }
 
-    static function enrol_user($courseid, $userid) {
+    public static function enrol_user($courseid, $userid) {
         global $DB;
 
-        if (!$role = $DB->get_record('role', array('shortname'=>'editingteacher'))) {
+        if (!$role = $DB->get_record('role', array('shortname' => 'editingteacher'))) {
             return get_string('editingteachernotexist', 'block_courses_vicensvives');
         }
 
@@ -86,7 +76,7 @@ class courses_vicensvives_add_book {
         }
     }
 
-    static function update($courseid, progress_bar $progress=null) {
+    public static function update($courseid, progress_bar $progress=null) {
         global $DB;
 
         $course = $DB->get_record('course', array('id' => $courseid), '*', MUST_EXIST);
@@ -103,14 +93,14 @@ class courses_vicensvives_add_book {
         return $addbook->updatedunits;
     }
 
-    private function create_course() {
+    private function create_course($format) {
         global $CFG, $DB;
 
-        $courseobj =  new stdClass();
+        $courseobj = new stdClass();
         $courseobj->category = $CFG->block_courses_vicensvives_defaultcategory;
 
         // Asignación de un shortname y idnumber no utilitzados
-        for ($n = 1; ; $n++) {
+        for ($n = 1; true; $n++) {
             $shortname = $this->book->shortname . '_' . $n;
             $idnumber = 'vv-' . $this->book->idBook . '-' . $n . '-' . $this->book->subject;
             $select = 'shortname = ? OR idnumber = ?';
@@ -126,8 +116,8 @@ class courses_vicensvives_add_book {
         // Comprobar q existe el formato de curso personalizado para aplicarlo.
         $courseobj->format = 'topics';
         $courseformats = get_plugin_list('format');
-        if (isset($courseformats['vv'])) {
-            $courseobj->format = 'vv';
+        if (isset($courseformats[$format])) {
+            $courseobj->format = $format;
         }
         // De esta manera no crearemos el foro de noticias.
         $courseobj->newsitems = 0;
@@ -144,52 +134,23 @@ class courses_vicensvives_add_book {
     }
 
     private function create_course_content() {
-        global $DB;
-
-        $roleid = $DB->get_field('role', 'id', array('shortname' => 'user'));
+        $coursegradecat = grade_category::fetch_course_category($this->course->id);
 
         $sectionnum = 1;
         foreach ($this->book->units as $unit) {
-            $items = $this->get_section_items($unit);
+            $mods = $this->get_section_mods($unit);
+
             $sectionname = $unit->label . '. ' . $unit->name;
-            $section = $this->setup_section($sectionnum, $sectionname, $items);
+            $section = $this->setup_section($sectionnum, $sectionname, $mods);
+
             $this->set_num_sections($sectionnum);
+
+            $idnumber = $this->book->idBook . '_unit_' . $unit->id;
+            $gradecat = $this->setup_grade_category($coursegradecat, $idnumber, $section->name, $section->section, true);
+
             $this->update_progress();
-            $beforemod = null;
-            foreach (array_reverse($items) as $item) {
-                $cm = $this->get_cm($item, $section);
 
-                if ($cm) {
-                    // Actualizamos idnumber si ha cambiado (etiquetas y enlaces creadas con una versión anterior)
-                    if ($cm->idnumber != $item['idnumber']) {
-                        $DB->set_field('course_modules', 'idnumber', $item['idnumber'], array('id' => $cm->id));
-                    }
-                } else {
-                    // Nueva actividad
-                    $cm = $this->create_mod($item, $section);
-
-                    // Añade a la sección
-                    $seq = $section->sequence ? explode(',', $section->sequence) : array();
-                    if ($beforemod) {
-                        $index = array_search($beforemod->id, $seq);
-                        array_splice($seq, $index, 0, array($cm->id));
-                    } else {
-                        $seq[] = $cm->id;
-                    }
-                    $section->sequence = implode(',', $seq);
-                    $DB->set_field('course_sections', 'sequence', $section->sequence, array('id' => $section->id));
-
-                    // Denegación del permiso de edición de la actividad
-                    $context = context_module::instance($cm->id);
-                    assign_capability('moodle/course:manageactivities', CAP_PROHIBIT, $roleid, $context);
-
-                    $this->updatedunits[$unit->id] = $unit;
-                }
-
-                $beforemod = $cm;
-                $this->update_progress();
-            }
-
+            $this->create_section_content($section, $unit, $mods, $gradecat);
             $sectionnum++;
         }
 
@@ -200,16 +161,17 @@ class courses_vicensvives_add_book {
     }
 
     // Esta función es diferente para cada versión de Moodle
-    private function create_mod($item, $section) {
+    private function create_mod($mod, $section) {
         global $CFG, $DB;
 
         $fromform = new stdClass();
-        $fromform->module = $DB->get_field('modules', 'id', array('name' => $item['modname']));
-        $fromform->modulename = $item['modname'];
+        $fromform->module = $DB->get_field('modules', 'id', array('name' => $mod['modname']));
+        $fromform->modulename = $mod['modname'];
         $fromform->visible = true;
-        $fromform->cmidnumber = $item['idnumber'];
-        $fromform->name = $item['name'];
-        $fromform->intro = $item['name'];
+        $fromform->cmidnumber = $mod['idnumber'];
+        $fromform->name = $mod['name'];
+        $fromform->indent = $mod['indent'];
+        $fromform->intro = '-';
         $fromform->introformat = 0;
         $fromform->availablefrom = 0;
         $fromform->availableuntil = 0;
@@ -219,26 +181,84 @@ class courses_vicensvives_add_book {
         $fromform->conditioncompletiongroup = array();
         $fromform->grade = $CFG->gradepointdefault;
 
-        foreach ($item['params'] as $key => $value) {
+        foreach ($mod['params'] as $key => $value) {
             $fromform->$key = $value;
         }
 
         courses_vicensvives_add_moduleinfo($fromform, $this->course, $section);
 
-        return $DB->get_record('course_modules', array('id' => $fromform->coursemodule), '*', MUST_EXIST);
+        return $fromform->coursemodule;
     }
 
-    private function get_cm($item, $section) {
+    private function create_section_content($section, $unit, $mods, $gradecat) {
         global $DB;
 
-        $conditions = array('course' => $this->course->id, 'idnumber' => $item['idnumber']);
+        $roleid = $DB->get_field('role', 'id', array('shortname' => 'user'));
+
+        $sequence = $section->sequence ? explode(',', $section->sequence) : array();
+        $prevmod = null;
+
+        foreach ($mods as $mod) {
+            $cm = $this->get_cm($mod, $section);
+
+            if ($cm) {
+                // Actualizamos idnumber si ha cambiado (etiquetas y enlaces creadas con una versión anterior)
+                if ($cm->idnumber != $mod['idnumber']) {
+                    $DB->set_field('course_modules', 'idnumber', $mod['idnumber'], array('id' => $cm->id));
+                }
+
+                $prevmod = $cm->id;
+                $sortgradeitem = false;
+
+            } else {
+                $transaction = $DB->start_delegated_transaction();
+
+                // Nueva actividad
+                $cmid = $this->create_mod($mod, $section);
+
+                // Añade a la sección
+                if ($prevmod) {
+                    $index = array_search($prevmod, $sequence);
+                    array_splice($sequence, $index + 1, 0, array($cmid));
+                } else {
+                    $sequence[] = $cmid;
+                }
+                $section->sequence = implode(',', $sequence);
+                $DB->set_field('course_sections', 'sequence', $section->sequence, array('id' => $section->id));
+
+                // Denegación del permiso de edición de la actividad
+                $context = context_module::instance($cmid);
+                assign_capability('moodle/course:manageactivities', CAP_PROHIBIT, $roleid, $context);
+
+                $this->updatedunits[$unit->id] = $unit;
+
+                $transaction->allow_commit();
+
+                $prevmod = $cmid;
+                $sortgradeitem = true;
+            }
+
+            if (!empty($mod['gradecat'])) {
+                $index = array_search($prevmod, $sequence);
+                $prevcmids = array_slice($sequence, 0, $index);
+                $this->setup_grade_item($gradecat, $mod, $prevcmids, $sortgradeitem);
+            }
+
+            $this->update_progress();
+        }
+    }
+
+    private function get_cm($mod, $section) {
+        global $DB;
+
+        $conditions = array('course' => $this->course->id, 'idnumber' => $mod['idnumber']);
         $cm = $DB->get_record('course_modules', $conditions);
         if ($cm) {
             return $cm;
         }
 
         // Anteriormente las etiquetas no tenían idnumber asignado, buscamos la etiqueta por nombre.
-        if ($item['modname'] == 'label') {
+        if ($mod['modname'] == 'label') {
             $sql = 'SELECT cm.*
                     FROM {course_modules} cm
                     JOIN {modules} m ON m.id = cm.module
@@ -251,7 +271,7 @@ class courses_vicensvives_add_book {
                 'course' => $this->course->id,
                 'section' => $section->id,
                 'modname' => 'label',
-                'name' => $item['name'],
+                'name' => $mod['name'],
             );
             $records = $DB->get_records_sql($sql, $params, 0, 1);
             if ($records) {
@@ -260,8 +280,8 @@ class courses_vicensvives_add_book {
         }
 
         // Anteriormente los enlaces tenían el idnumber con un formato diferente
-        if ($item['modname'] == 'url') {
-            if (preg_match('/^.+_(link_.+)$/', $item['idnumber'], $match)) {
+        if ($mod['modname'] == 'url') {
+            if (preg_match('/^.+_(link_.+)$/', $mod['idnumber'], $match)) {
                 $conditions = array('course' => $this->course->id, 'idnumber' => $match[1]);
                 $cm = $DB->get_record('course_modules', $conditions);
                 if ($cm) {
@@ -273,88 +293,99 @@ class courses_vicensvives_add_book {
         return null;
     }
 
-    private function get_section_items($unit) {
-        $items = array();
+    private function get_lti_mod($type, $element, $gradecat) {
+        $mod = array(
+            'idnumber' => $this->book->idBook . '_' . $type . '_' . $element->id,
+            'name' => $element->lti->activityName,
+            'modname' => 'lti',
+            'indent' => 1,
+            'params' => array(
+                'toolurl' => $element->lti->launchURL,
+                'instructorchoicesendname' => true,
+                'instructorchoicesendemailaddr' => true,
+                'launchcontainer' => 4, // window
+            ),
+            'gradecat' => null,
+        );
+        if (isset($element->element->lti->activityDescription)) {
+            $mod['params']['intro'] = $element->lti->activityDescription;
+        }
+        if (isset($element->lti->consumerKey)) {
+            $mod['params']['resourcekey'] = $element->lti->consumerKey;
+        }
+        if (isset($element->lti->sharedSecret)) {
+            $mod['params']['password'] = $element->lti->sharedSecret;
+        }
+        if (isset($element->lti->customParameters)) {
+            $mod['params']['instructorcustomparameters'] = $element->lti->customParameters;
+        }
+        if (isset($element->lti->acceptGrades)) {
+            $mod['params']['instructorchoiceacceptgrades'] = (int) $element->lti->acceptGrades;
+            if ($element->lti->acceptGrades != 0) {
+                $mod['gradecat'] = $gradecat;
+            }
+        }
+        return $mod;
+    }
+
+    private function get_section_mods($unit) {
+        $mods = array();
+        $sectionnum = 0;
 
         foreach ($unit->sections as $section) {
-            $items[] = array(
+            $mods[] = array(
                 'idnumber' => $this->book->idBook . '_label_' . $section->id,
-                'name' => '[' . $section->label . '] ' . $section->name,
+                'name' => '', // Se generar a partir de la descripción
                 'modname' => 'label',
-                'params' => array(),
+                'indent' => 0,
+                'params' => array(
+                    'intro' => html_writer::tag('h4', s($section->label) . '. ' . s($section->name)),
+                    'introformat' => FORMAT_HTML,
+                ),
+                'gradecat' => null,
+            );
+
+            $gradecat = array(
+                'idnumber' => $this->book->idBook . '_label_' . $section->id,
+                'name' => s($section->label) . '. ' . s($section->name),
+                'position' => $sectionnum,
             );
 
             if (!empty($section->lti)) {
-                $items[] = array(
-                    'idnumber' => $this->book->idBook . '_section_' . $section->id,
-                    'name' => $section->lti->activityName,
-                    'modname' => 'lti',
-                    'params' => $this->lti_params($section->lti),
-                );
+                $mods[] = $this->get_lti_mod('section', $section, $gradecat);
             }
 
             if (!empty($section->questions)) {
                 foreach ($section->questions as $question) {
-                    $items[] = array(
-                        'idnumber' => $this->book->idBook . '_question_' . $question->id,
-                        'name' => $question->lti->activityName,
-                        'modname' => 'lti',
-                        'params' => $this->lti_params($question->lti),
-                    );
+                    $mods[] = $this->get_lti_mod('question', $question, $gradecat);
                 }
             }
             if (!empty($section->links)) {
                 foreach ($section->links as $link) {
-                    $items[] = array(
+                    $mods[] = array(
                         'idnumber' => $this->book->idBook . '_link_' . $link->id,
                         'name' => $link->name,
                         'modname' => 'url',
+                        'indent' => 1,
                         'params' => array(
                             'externalurl' => $link->url,
                             'intro' => $link->summary,
                             'display' => 0,
                         ),
+                        'gradecat' => null,
                     );
                 }
             }
             if (!empty($section->documents)) {
                 foreach ($section->documents as $document) {
-                    $items[] = array(
-                        'idnumber' => $this->book->idBook . '_document_' . $document->id,
-                        'name' => $document->lti->activityName,
-                        'modname' => 'lti',
-                        'params' => $this->lti_params($document->lti),
-                    );
+                    $mods[] = $this->get_lti_mod('document', $document, $gradecat);
                 }
             }
+
+            $sectionnum++;
         }
 
-        return $items;
-    }
-
-    private function lti_params($lti) {
-        $params = array(
-            'toolurl' => $lti->launchURL,
-            'instructorchoicesendname' => true,
-            'instructorchoicesendemailaddr' => true,
-            'launchcontainer' => 4, // window
-        );
-        if (isset($lti->activityDescription))  {
-            $params['intro'] = $lti->activityDescription;
-        }
-        if (isset($lti->consumerKey)) {
-            $params['resourcekey'] = $lti->consumerKey;
-        }
-        if (isset($lti->sharedSecret)) {
-            $params['password'] = $lti->sharedSecret;
-        }
-        if (isset($lti->customParameters)) {
-            $params['instructorcustomparameters'] = $lti->customParameters;
-        }
-        if (isset($lti->acceptGrades)) {
-            $params['instructorchoiceacceptgrades'] = (int) $lti->acceptGrades;
-        }
-        return $params;
+        return $mods;
     }
 
     private function progress_total($createcourse=true) {
@@ -387,16 +418,119 @@ class courses_vicensvives_add_book {
         }
     }
 
-    private function setup_section($sectionnum, $name, array $items=null) {
+    private function setup_grade_category(grade_category $parent, $idnumber, $name, $position, $sort=false) {
+        // Obtien o crea la categoria
+        $params = array('courseid' => $parent->courseid, 'itemtype' => 'category', 'idnumber' => $idnumber);
+        $item = grade_item::fetch($params);
+        if ($item) {
+            $category = grade_category::fetch(array('id' => $item->iteminstance));
+            if ($category->parent != $parent->id or $category->fullname != $name) {
+                $category->parent = $parent->id;
+                $category->fullname = $name;
+                $category->update();
+                // Obtiene al grade_item actualizado
+                $item = $category->get_grade_item();
+                $sort = true;
+            }
+        } else {
+            $params = array(
+                'courseid' => $parent->courseid,
+                'parent' => $parent->id,
+                'fullname' => $name,
+            );
+            $category = new grade_category($params, false);
+            $category->apply_default_settings();
+            $category->apply_forced_settings();
+            $category->aggregation = GRADE_AGGREGATE_MEAN;
+            $category->insert();
+            $item = $category->get_grade_item();
+            $item->idnumber = $idnumber;
+            $item->update();
+            $sort = true;
+        }
+
+        if ($sort) {
+            // Obtiene los grade_items de las categorías del mismo nivel y los ordena por sortorder
+            $categories = grade_category::fetch_all(array('parent' => $parent->id));
+            $items = array();
+            foreach ($categories as $c) {
+                $items[] = $c->get_grade_item();
+            }
+            usort($items, function($a, $b) {
+                return $a->sortorder - $b->sortorder;
+            });
+
+            // Ordena la categoría
+            if (isset($items[$position]) and $items[$position]->id != $item->id) {
+                $item->move_after_sortorder($items[$position]->sortorder - 1);
+            }
+        }
+
+        return $category;
+    }
+
+
+    private function setup_grade_item(grade_category $parent, $mod, $prevcmids, $sort=false) {
+        global $DB;
+
+        $gradecat = $this->setup_grade_category($parent, $mod['gradecat']['idnumber'], $mod['gradecat']['name'],
+                                                $mod['gradecat']['position']);
+
+        $params = array('courseid' => $gradecat->courseid, 'idnumber' => $mod['idnumber']);
+        $items = grade_item::fetch_all($params);
+        if (!$items) {
+            return;
+        }
+
+        foreach ($items as $item) {
+            if ($item->categoryid != $gradecat->id) {
+                $item->categoryid = $gradecat->id;
+                $item->update();
+                $sort = true;
+            }
+        }
+
+        if (!$sort) {
+            return;
+        }
+
+        usort($items, function($a, $b) {
+            return $a->sortorder - $b->sortorder;
+        });
+
+        list($sqlin, $params) = $DB->get_in_or_equal($prevcmids, SQL_PARAMS_NAMED);
+        $sql = "SELECT MAX(sortorder)
+                FROM {course_modules} cm
+                JOIN {modules} m ON m.id = cm.module
+                JOIN {grade_items} gi ON gi.iteminstance = cm.instance AND gi.itemmodule = m.name
+                WHERE cm.id $sqlin
+                AND gi.itemtype = :itemtype
+                AND gi.courseid = cm.course";
+        $params['itemtype'] = 'mod';
+        $sortorder = $DB->get_field_sql($sql, $params);
+
+        if (!$sortorder) {
+            $sortorder = $gradecat->get_grade_item()->sortorder;
+        }
+
+        foreach ($items as $item) {
+            if ($item->sortorder != $sortorder + 1) {
+                $item->move_after_sortorder($sortorder);
+                $sortorder = $item->sortorder;
+            }
+        }
+    }
+
+    private function setup_section($sectionnum, $name, array $mods=null) {
         global $DB;
 
         $section = null;
 
         // Búsqueda de la sección basada en los elementos ya creados
-        if ($items) {
+        if ($mods) {
             $idnumbers = array();
-            foreach ($items as $item) {
-                $idnumbers[] = $item['idnumber'];
+            foreach ($mods as $mod) {
+                $idnumbers[] = $mod['idnumber'];
             }
 
             list($idnumbersql, $params) = $DB->get_in_or_equal($idnumbers, SQL_PARAMS_NAMED);
@@ -457,11 +591,12 @@ class courses_vicensvives_add_book {
 }
 
 // Función basa en add_moduleinfo, con estas diferencias:
-//  - Se pasa el registro de sección para evitar consultar la base de datos
-//  - Se ha eliminado código que procesa parámetros no utilitzados
-//  - No se llama rebuild_course_cache (se llama una sola vez al final)
-//  - No se llama grade_regrade_final_grades (se llama una sola vez al final)
-//  - No añade el módulo a la sección, se hace posteriormente
+// - Se pasa el objeto de la sección para evitar una consulta a la base de datos
+// - Se ha eliminado código que procesa parámetros no utilitzados
+// - Se guarda el campo "indent"
+// - No se llama rebuild_course_cache (se llama una sola vez al final)
+// - No se llama grade_regrade_final_grades (se llama una sola vez al final)
+// - No añade el módulo a la sección (se hace posteriormente)
 function courses_vicensvives_add_moduleinfo($moduleinfo, $course, $section) {
     global $DB, $CFG;
 
@@ -487,11 +622,8 @@ function courses_vicensvives_add_moduleinfo($moduleinfo, $course, $section) {
     }
     $newcm->groupmode        = $moduleinfo->groupmode;
     $newcm->groupingid       = $moduleinfo->groupingid;
-    $newcm->groupmembersonly = !empty($moduleinfo->groupmembersonly);
-    $newcm->showdescription = 0;
-
-    // From this point we make database changes, so start transaction.
-    $transaction = $DB->start_delegated_transaction();
+    $newcm->showdescription  = 0;
+    $newcm->indent           = $moduleinfo->indent;
 
     $newcm->added = time();
     $newcm->section = $section->id;
@@ -510,7 +642,7 @@ function courses_vicensvives_add_moduleinfo($moduleinfo, $course, $section) {
         // support transactions, but improves consistency for other databases.
         $modcontext = context_module::instance($moduleinfo->coursemodule);
         context_helper::delete_instance(CONTEXT_MODULE, $moduleinfo->coursemodule);
-        $DB->delete_records('course_modules', array('id'=>$moduleinfo->coursemodule));
+        $DB->delete_records('course_modules', array('id' => $moduleinfo->coursemodule));
 
         if ($e instanceof moodle_exception) {
             throw $e;
@@ -523,24 +655,5 @@ function courses_vicensvives_add_moduleinfo($moduleinfo, $course, $section) {
 
     $moduleinfo->instance = $returnfromfunc;
 
-    $DB->set_field('course_modules', 'instance', $returnfromfunc, array('id'=>$moduleinfo->coursemodule));
-
-    // Update embedded links and save files.
-    $modcontext = context_module::instance($moduleinfo->coursemodule);
-
-    $hasgrades = plugin_supports('mod', $moduleinfo->modulename, FEATURE_GRADE_HAS_GRADE, false);
-    $hasoutcomes = plugin_supports('mod', $moduleinfo->modulename, FEATURE_GRADE_OUTCOMES, true);
-
-    // Sync idnumber with grade_item.
-    if ($hasgrades && $grade_item = grade_item::fetch(array('itemtype'=>'mod', 'itemmodule'=>$moduleinfo->modulename,
-                 'iteminstance'=>$moduleinfo->instance, 'itemnumber'=>0, 'courseid'=>$course->id))) {
-        if ($grade_item->idnumber != $moduleinfo->cmidnumber) {
-            $grade_item->idnumber = $moduleinfo->cmidnumber;
-            $grade_item->update();
-        }
-    }
-
-    $transaction->allow_commit();
-
-    return $moduleinfo;
+    $DB->set_field('course_modules', 'instance', $returnfromfunc, array('id' => $moduleinfo->coursemodule));
 }

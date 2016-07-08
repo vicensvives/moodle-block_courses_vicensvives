@@ -14,35 +14,25 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Authentication Plugin:
- *
- * Checks against an external database.
- *
- * @package    courses_vicensvives
- * @author     CV&A Consulting
- * @license    http://www.gnu.org/copyleft/gpl.html GNU Public License
- */
-
 class vicensvives_ws {
 
     const WS_URL = 'http://api.vicensvivesdigital.com/rest';
 
-    static function configured() {
+    public static function configured() {
         global $CFG;
 
         return !empty($CFG->vicensvives_sharekey) and !empty($CFG->vicensvives_sharepass);
     }
 
-    function book($bookid) {
+    public function book($bookid) {
         if (!$bookid) {
             return null;
         }
         return $this->call('get', 'books/' . $bookid, array('lti_info' => "true"));
     }
 
-    function books() {
-        $books = $this->call('get', 'books', array('own' => "true")) ?: array();
+    public function books() {
+        $books = $this->call('get', 'books', array('own' => "false")) ?: array();
 
         foreach ($books as $key => $book) {
             if (empty($book->idBook)) {
@@ -54,17 +44,17 @@ class vicensvives_ws {
         return $books;
     }
 
-    function levels($lang) {
+    public function levels($lang) {
         $levels = $this->call('get', 'levels', array('lang' => $lang)) ?: array();
         foreach ($levels as $key => $level) {
-            if (empty($level->idLevel))  {
+            if (empty($level->idLevel)) {
                 unset($levels[$key]);
             }
         }
         return $levels;
     }
 
-    function licenses($book=null, $activated=null) {
+    public function licenses($book=null, $activated=null) {
         $params = array();
         if ($book !== null) {
             $params['book'] = (int) $book;
@@ -75,18 +65,18 @@ class vicensvives_ws {
         return $this->call('get', 'licenses', $params);
     }
 
-    function send_token($token) {
+    public function send_token($token) {
         global $CFG;
         $params = array(
             'url' => $CFG->wwwroot,
             'token' => $token,
             'identifier' => get_site_identifier(),
-            'serviceEndpoint' =>  $CFG->wwwroot . '/webservice/rest/server.php',
+            'serviceEndpoint' => $CFG->wwwroot . '/webservice/rest/server.php',
         );
         return (bool) $this->call('post', 'schools/moodle', $params);
     }
 
-    function subjects($lang) {
+    public function subjects($lang) {
         $subjects = $this->call('get', 'subjects', array('lang' => $lang)) ?: array();
         foreach ($subjects as $key => $subject) {
             if (empty($subject->idSubject)) {
@@ -219,7 +209,7 @@ class vicensvives_ws {
 
         if ($status == 200 and !empty($response->access_token)) {
             set_config('vicensvives_accesstoken', $response->access_token);
-        } elseif ($status == 401 and isset($response->cod) and $response->cod == 401001) {
+        } else if ($status == 401 and isset($response->cod) and $response->cod == 401001) {
             throw new vicensvives_ws_error('wsauthfailed');
         } else {
             throw new vicensvives_ws_error('wsunknownerror');
@@ -228,8 +218,8 @@ class vicensvives_ws {
 }
 
 class vicensvives_ws_error extends moodle_exception {
-    function __construct($errorcode, $a=null, $debuginfo=null) {
-        parent::__construct($errorcode, 'block_courses_vicensvives', '', $a, $debuginfo=null);
+    public function __construct($errorcode, $a=null, $debuginfo=null) {
+        parent::__construct($errorcode, 'block_courses_vicensvives', '', $a, $debuginfo);
     }
 }
 

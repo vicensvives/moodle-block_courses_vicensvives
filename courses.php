@@ -14,31 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Authentication Plugin:
- *
- * Checks against an external database.
- *
- * @package    courses_vicensvives
- * @author     CV&A Consulting
- * @license    http://www.gnu.org/copyleft/gpl.html GNU Public License
- */
-
 require('../../config.php');
 require_once("$CFG->dirroot/blocks/courses_vicensvives/locallib.php");
 
 if (!isloggedin() or isguestuser()) {
     require_login();
 }
-require_login(0, false);
+require_login(null, false);
 
 $returnurl = new moodle_url('/blocks/courses_vicensvives/courses.php');
-//$returnurl = new moodle_url('/index.php/');
 $PAGE->set_url($returnurl);
 
-$context = context_system::instance();
-
-$PAGE->set_context($context);
+$PAGE->set_context(context_system::instance());
 
 $PAGE->set_pagelayout('standard');
 
@@ -50,50 +37,77 @@ $PAGE->navbar->add(get_string('blocks'));
 $PAGE->navbar->add(get_string('pluginname', 'block_courses_vicensvives'));
 $PAGE->navbar->add(get_string('courses', 'block_courses_vicensvives'), $viewcourses);
 
-echo $OUTPUT->header();
+if ($courseid = optional_param('update', false, PARAM_INT)) {
+    $context = context_coursecat::instance($CFG->block_courses_vicensvives_defaultcategory);
+    require_capability('moodle/course:create', $context);
+    require_sesskey();
 
-require_once($CFG->dirroot.'/lib/resourcelib.php');
+    @set_time_limit(0);
+    raise_memory_limit(MEMORY_HUGE);
 
-$url = $CFG->wwwroot.'/blocks/courses_vicensvives/commander.php';
+    $PAGE->set_pagelayout('base');
+    echo $OUTPUT->header();
 
-// El profesor ve de sus cursos los filtrados de VV.
-// Sólo profesores!!
+    $coursename = format_string(get_course($courseid)->fullname);
+    echo $OUTPUT->heading(get_string('updateingcourse', 'block_courses_vicensvives') . ': ' . $coursename);
 
-$renderer = $PAGE->get_renderer('block_courses_vicensvives');
+    $progress = new progress_bar();
+    $updatedunits = courses_vicensvives_add_book::update($courseid  , $progress);
 
-if (isloggedin() and !isguestuser() and !(has_capability('moodle/course:update', context_system::instance()))) {
-    // Just print My Courses.
-    if (! $mycourses = enrol_get_my_courses(null, 'visible DESC, fullname ASC')) {
-        redirect($CFG->wwwroot, get_string('nohaycursos', 'block_courses_vicensvives'), 10);
+    if ($updatedunits) {
+        echo $OUTPUT->heading(get_string('updatedunits', 'block_courses_vicensvives'), 4);
+        echo html_writer::start_tag('ul', array('class' => 'vicensives_newunits'));
+        foreach ($updatedunits as $unit) {
+            echo html_writer::tag('li', html_writer::tag('strong', $unit->label . '.') . ' ' . $unit->name);
+        }
+        echo html_writer::end_tag('ul');
+    } else {
+        echo $OUTPUT->heading(get_string('noupdatedunits', 'block_courses_vicensvives'), 4);
     }
 
-    // Filtrar mycourses con sólo los de VV.
-    foreach ($mycourses as $course) {
-        if ($course->format != 'vv') {
+    $urlcourse = new moodle_url('/course/view.php', array('id' => $courseid));
+    $link = html_writer::link($urlcourse, get_string('gotocourse', 'block_courses_vicensvives'));
+    echo html_writer::div("($link)", 'continuebutton');
+
+    echo $OUTPUT->footer();
+}
+
+$fields = 'id, format, fullname, visible, summary, summaryformat';
+
+if (has_capability('moodle/course:update', context_system::instance())) {
+    $select = $DB->sql_like('idnumber', ':idnumber');
+    $params = array('idnumber' => 'vv-%');
+    $courses = $DB->get_records_select('course', $select, $params, 'sortorder', $fields);
+} else {
+    $courses = array();
+    foreach (enrol_get_my_courses($fields, 'visible DESC, fullname ASC') as $course) {
+        if (!preg_match('/^vv-/i', $course->idnumber)) {
             continue;
         }
         $coursecontext = context_course::instance($course->id);
-        if ($course->visible == 1 || has_capability('moodle/course:viewhiddencourses', $coursecontext)) {
-            echo $renderer->course_info_box($course);
+        if ($course->visible or has_capability('moodle/course:viewhiddencourses', $coursecontext)) {
+            $courses[] = $course;
         }
     }
 }
 
-// Administradores.
-if (has_capability('moodle/course:update', context_system::instance())) {
-    $conditions = array('format' => 'vv');
-    $fields = 'id, fullname, visible, summary, summaryformat';
-    $courses = $DB->get_records('course', $conditions, 'sortorder', $fields);
+if (!$courses) {
+    redirect($CFG->wwwroot, get_string('nohaycursos', 'block_courses_vicensvives'), 10);
+}
 
-    echo $OUTPUT->single_button(new moodle_url('/blocks/courses_vicensvives/books.php'), get_string('addcourse',
-        'block_courses_vicensvives'));
+echo $OUTPUT->header();
 
-    foreach ($courses as $course) {
-        $coursecontext = context_course::instance($course->id);
-        if ($course->visible == 1 || has_capability('moodle/course:viewhiddencourses', $coursecontext)) {
-            echo $renderer->course_info_box($course);
-        }
-    }
+$contextcat = context_coursecat::instance($CFG->block_courses_vicensvives_defaultcategory);
+if (has_capability('moodle/course:create', $contextcat)) {
+    $url = new moodle_url('/blocks/courses_vicensvives/books.php');
+    $text = get_string('addcourse', 'block_courses_vicensvives');
+    echo $OUTPUT->single_button($url, $text);
+}
+
+$renderer = $PAGE->get_renderer('block_courses_vicensvives');
+
+foreach ($courses as $course) {
+    echo $renderer->course_info_box($course);
 }
 
 echo $OUTPUT->footer();

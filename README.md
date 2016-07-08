@@ -1,9 +1,11 @@
-Bloque de cursos Vicens Vives (Moodle 2.8)
-==========================================
+Bloque de cursos Vicens Vives
+=============================
 
 Bloque para listar, crear y actualizar cursos a partir de lubros importados del
 web service de Vicens Vives. También permite configurar automáticamente el web
 service de Moodle.
+
+Versiones de Moodle: 3.1
 
 Parámetros de configuración
 ---------------------------

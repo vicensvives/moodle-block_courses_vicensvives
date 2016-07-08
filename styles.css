@@ -17,8 +17,7 @@ table.vicensvives_books .vicensvives_actions {
 }
 
 ul.vicensives_newunits {
-    width: 30em;
-    margin: 1em auto;
+    margin-left: 0;
     list-style: none;
 }
 

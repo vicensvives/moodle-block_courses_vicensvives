@@ -1,4 +1,18 @@
 <?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 require_once($CFG->libdir.'/adminlib.php');
 
@@ -46,7 +60,7 @@ class courses_vicensvives_setting_moodlews extends admin_setting_configcheckbox 
     const ROLESHORTNAME = 'wsvicensvives';
     const ROLENAME = 'Web Service Vicens Vives';
 
-    static $capabilities = array(
+    private static $capabilities = array(
         'webservice/rest:use',
         'moodle/grade:edit',
     );
@@ -56,24 +70,41 @@ class courses_vicensvives_setting_moodlews extends admin_setting_configcheckbox 
     }
 
     public function get_setting() {
-        // Comprueba si el parámetro se ha configurado previamente.
-        if (!get_config($this->plugin, $this->name . '_settingused')) {
-            return null;
+        // En versiones anteriores no se guardaba el estado del parámetro, pero se usaba un parámetro falso para indicar
+        // si se había configurado o no. Si existe migramos al nuevo parámetro.
+        if (get_config($this->plugin, $this->name . '_settingused') == '1') {
+            unset_config($this->name . '_settingused', $this->plugin);
+            $value = self::is_enabled() ? $this->yes : $this->no;
+            set_config($this->name, $value);
+            return $value;
         }
-        return self::is_enabled() ? $this->yes : $this->no;
+
+        $value = get_config($this->plugin, $this->name);
+        if ($value == $this->yes and !self::is_enabled()) {
+            $value = $this->no;
+        }
+        return $value;
     }
 
     public function write_setting($data) {
-        global $DB;
-
-        // Marca el parámetro como configurado, para que no se muestre en las notificaciones.
-        set_config($this->name . '_settingused', '1', $this->plugin);
-
         if ((string) $data === $this->yes) {
-            return self::enable();
+            $error = self::enable();
+            if ($error !== '') {
+                $data = $this->no;
+            }
         } else {
-            return self::disable();
+            $error = self::disable();
         }
+
+        set_config($this->name, $data, $this->plugin);
+
+        return $error;
+    }
+
+    public static function get_service() {
+        global $DB;
+        $conditions = array('component' => self::SERVICE);
+        return $DB->get_record('external_services', $conditions);
     }
 
     private static function disable() {
@@ -110,8 +141,8 @@ class courses_vicensvives_setting_moodlews extends admin_setting_configcheckbox 
 
         // Servicio
         $service = self::get_service();
-        if (!$service) {
-            return;
+        if (!$service->enabled) {
+            $DB->set_field('external_services', 'enabled', 1, array('id' => $service->id));
         }
 
         // Usuario
@@ -173,12 +204,6 @@ class courses_vicensvives_setting_moodlews extends admin_setting_configcheckbox 
         global $DB;
         $conditions = array('shortname' => self::ROLESHORTNAME);
         return $DB->get_field('role', 'id', $conditions);
-    }
-
-    private static function get_service() {
-        global $DB;
-        $conditions = array('component' => self::SERVICE);
-        return $DB->get_record('external_services', $conditions);
     }
 
     private static function get_token($service, $userid) {

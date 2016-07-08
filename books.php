@@ -14,59 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Authentication Plugin:
- *
- * Checks against an external database.
- *
- * @package    courses_vicensvives
- * @author     CV&A Consulting
- * @license    http://www.gnu.org/copyleft/gpl.html GNU Public License
- */
-
 require('../../config.php');
 require_once($CFG->dirroot.'/lib/resourcelib.php');
 require_once($CFG->dirroot.'/lib/tablelib.php');
-require_once($CFG->dirroot.'/lib/formslib.php');
 require_once($CFG->dirroot.'/blocks/courses_vicensvives/locallib.php');
-
-
-class books_form extends moodleform {
-
-    public function definition() {
-        global $CFG;
-
-        $mform = $this->_form;
-        $levels = $this->_customdata['levels'];
-        $subjects = $this->_customdata['subjects'];
-
-        $mform->addElement('header', 'search', get_string('search'));
-        if (method_exists($mform, 'setExpanded')) {
-            $mform->setExpanded('search', false);
-        }
-
-        $string = get_string('fullname', 'block_courses_vicensvives');
-        $mform->addElement('text', 'fullname', $string);
-        $mform->setType('fullname', PARAM_TEXT);
-
-        $string = get_string('subject', 'block_courses_vicensvives');
-        $mform->addElement('select', 'idSubject', $string, $subjects);
-        $mform->setType('idSubject', PARAM_INT);
-
-        $string = get_string('idLevel', 'block_courses_vicensvives');
-        $mform->addElement('select', 'idlevel', $string, $levels);
-        $mform->setType('idlevel', PARAM_INT);
-
-        $string = get_string('isbn', 'block_courses_vicensvives');
-        $mform->addElement('text', 'isbn', $string);
-        $mform->setType('isbn', PARAM_TEXT);
-
-        $buttonarray = array();
-        $buttonarray[] = &$mform->createElement('submit', 'search', get_string('search'));
-        $buttonarray[] = &$mform->createElement('cancel', 'reset', get_string('reset'));
-        $mform->addGroup($buttonarray, 'buttonar', '', array(' '), false);
-    }
-}
 
 function str_contains($haystack, $needle) {
     // Normaliza el texto a carñacteres ASCII en mínuscula y sin espacios duplicados
@@ -114,7 +65,10 @@ try {
         $subjects[$subject->idSubject] = $subject->name;
     }
 
-    $all_books = $ws->books();
+    $allbooks = array();
+    foreach ($ws->books() as $book) {
+        $allbooks[$book->idBook] = $book;
+    }
 
 } catch (vicensvives_ws_error $e) {
     echo $OUTPUT->header();
@@ -123,16 +77,63 @@ try {
     exit;
 }
 
-$filtered_books = array();
+if ($bookid = optional_param('create', false, PARAM_INT)) {
+    if (!isset($allbooks[$bookid])) {
+        redirect($baseurl);
+    }
+
+    $book = $allbooks[$bookid];
+    $customdata = array(
+        'fullname' => $book->fullname,
+        'subject' => isset($subjects[$book->idSubject]) ? $subjects[$book->idSubject] : '',
+        'level' => isset($levels[$book->idLevel]) ? $levels[$book->idLevel] : '',
+        'isbn' => $book->isbn,
+    );
+    $formurl = new moodle_url($baseurl, array('create' => $bookid));
+    $form = new \block_courses_vicensvives\create_form($formurl, $customdata, 'post');
+
+    if ($form->is_cancelled()) {
+        redirect($baseurl);
+    } else if ($data = $form->get_data()) {
+        $PAGE->set_pagelayout('base');
+        echo $OUTPUT->header();
+        echo $OUTPUT->heading(get_string('creatingcourse', 'block_courses_vicensvives') . ': ' . $book->fullname);
+
+        @set_time_limit(0);
+        raise_memory_limit(MEMORY_HUGE);
+
+        $progress = new progress_bar();
+        $courseid = courses_vicensvives_add_book::create($bookid, $data->format, $progress);
+
+        $errormsg = courses_vicensvives_add_book::enrol_user($courseid, $USER->id);
+        if ($errormsg) {
+            echo $OUTPUT->notification($errormsg, 'warning');
+        }
+
+        $urlcourse = new moodle_url('/course/view.php', array('id' => $courseid));
+        $link = html_writer::link($urlcourse, get_string('gotocourse', 'block_courses_vicensvives'));
+        echo html_writer::div("($link)", 'continuebutton');
+
+        echo $OUTPUT->footer();
+    } else {
+        echo $OUTPUT->header();
+        $form->display();
+        echo $OUTPUT->footer();
+    }
+
+    exit;
+}
+
+$filteredbooks = array();
 
 $customdata = array('levels' => $levels, 'subjects' => $subjects);
-$form = new books_form(null, $customdata, 'get');
+$form = new \block_courses_vicensvives\filter_form(null, $customdata, 'get');
 
 if ($form->is_cancelled()) {
     redirect($baseurl);
-} elseif ($data = $form->get_data()) {
+} else if ($data = $form->get_data()) {
 
-    foreach ($all_books as $book) {
+    foreach ($allbooks as $book) {
         if (!empty($data->fullname) and !str_contains($book->fullname, $data->fullname)) {
             continue;
         }
@@ -145,10 +146,10 @@ if ($form->is_cancelled()) {
         if (!empty($data->isbn) and !str_contains($book->isbn, $data->isbn)) {
             continue;
         }
-        $filtered_books[] = $book;
+        $filteredbooks[$book->idBook] = $book;
     }
 } else {
-    $filtered_books = $all_books;
+    $filteredbooks = $allbooks;
 }
 
 
@@ -157,11 +158,11 @@ echo $OUTPUT->heading('');
 
 $form->display();
 
-if ($filtered_books) {
-    $a = array('total' => count($all_books), 'found' => count($filtered_books));
+if ($filteredbooks) {
+    $a = array('total' => count($allbooks), 'found' => count($filteredbooks));
     $string = get_string('searchresult', 'block_courses_vicensvives', $a);
 } else {
-    $string = get_string('searchempty', 'block_courses_vicensvives', count($all_books));
+    $string = get_string('searchempty', 'block_courses_vicensvives', count($allbooks));
 }
 echo $OUTPUT->heading($string);
 
@@ -173,24 +174,23 @@ $table->column_class('actions', 'vicensvives_actions');
 $table->define_headers(array(
     get_string('fullname', 'block_courses_vicensvives'),
     get_string('subject', 'block_courses_vicensvives'),
-    get_string('idLevel', 'block_courses_vicensvives'),
+    get_string('level', 'block_courses_vicensvives'),
     get_string('isbn', 'block_courses_vicensvives'),
-    get_string('actions','block_courses_vicensvives'),
+    get_string('actions', 'block_courses_vicensvives'),
 ));
 $table->sortable(true, 'name');
 $table->no_sorting('actions');
-$table->pagesize(50, count($filtered_books));
+$table->pagesize(50, count($filteredbooks));
 $table->setup();
 
 $rows = array();
-foreach ($filtered_books as $book) {
+foreach ($filteredbooks as $book) {
     $row = new stdClass;
     $row->name = $book->fullname;
     $row->subject = isset($subjects[$book->idSubject]) ? $subjects[$book->idSubject] : '';
     $row->level = isset($levels[$book->idLevel]) ? $levels[$book->idLevel] : '';
     $row->isbn = $book->isbn;
-    $params = array('bookid' => $book->idBook, 'sesskey' => sesskey());
-    $addurl = new moodle_url('/blocks/courses_vicensvives/addbook.php', $params);
+    $addurl = new moodle_url('/blocks/courses_vicensvives/books.php', array('create' => $book->idBook));
     $title = get_string('addcourse', 'block_courses_vicensvives');
     $icon = html_writer::empty_tag('img', array('src' => $OUTPUT->pix_url('t/addfile'), 'alt' => $title));
     $row->actions = html_writer::link($addurl, $icon, array('title' => $title));

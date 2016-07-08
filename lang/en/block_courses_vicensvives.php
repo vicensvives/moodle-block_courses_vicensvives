@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -15,13 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Strings for component 'block_courses_vicensvives', language 'en', branch 'MOODLE_20_STABLE'
- *
- * @package   block_courses_vicensvives
- * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
 $string['pluginname'] = 'Courses Vicens Vives';
 
 // Settings.
@@ -63,19 +55,20 @@ $string['addcourse'] = 'Crear un nuevo curso';
 $string['nohaycursos'] = 'No hay cursos que mostrar';
 $string['searchresult'] = '{$a->found} de {$a->total} libros';
 $string['searchempty'] = '{$a} libros';
+$string['create'] = 'Crear';
+$string['standardformat'] = 'Estándar de Moodle (por temas)';
 
 // Tabla libros
-
 $string['fullname'] = 'Nombre';
 $string['subject'] = 'Materia';
-$string['idLevel'] = 'Nivel';
+$string['level'] = 'Nivel';
 $string['isbn'] = 'ISBN';
 $string['actions'] = 'Acciones';
 $string['nobooksfound'] = 'No se han encontrado libros';
 
 // Crear el curs.
 $string['creatingcourse'] = 'Creando curso';
-$string['redirectcourse'] = 'Redireccionando al curso.';
+$string['gotocourse'] = 'Ir al curso';
 $string['editingteachernotexist'] = "No se ha podido matricular al usuario: El rol 'editingteacher' no existe.";
 $string['manualnotenable'] = "No se ha podido matricular al usuario: La matriculación manual no está activada.";
 $string['nofetchbook'] = 'No se ha podido obtener el libro';

@@ -14,17 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Version details
- *
- * @package    block
- * @subpackage course_list
- * @copyright  1999 onwards Martin Dougiamas (http://dougiamas.com)
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2015091600;        // The current plugin version (Date: YYYYMMDDXX)
-$plugin->requires  = 2014111000;        // Requires this Moodle version
+$plugin->version   = 2016070700;        // The current plugin version (Date: YYYYMMDDXX)
+$plugin->requires  = 2016052300;        // Requires this Moodle version
 $plugin->component = 'block_courses_vicensvives'; // Full name of the plugin (used for diagnostics)
