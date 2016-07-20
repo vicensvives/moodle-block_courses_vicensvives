@@ -43,6 +43,8 @@ $string['wsauthfailed'] = 'Ha fallado la autentificación con el Web Service de 
 $string['wsunknownerror'] = 'Se ha producido un error inesperado en conectar con el Web Service de Vicens Vives.';
 $string['wssitemismatch'] = 'Las credenciales (clave y secreto compartido) ya se están utilitzando en otra instalación de Moodle.';
 $string['booknotfetched'] = 'No se ha podido obtener el libro.';
+$string['moodlewsnotinstalled'] = 'El plugin del web service de calificaciones no está instalado.';
+$string['moodlewsnotenabled'] = 'El web service de calificaciones no está activado, se configurará en guardar los cambios.';
 
 // Contenido del bloque.
 $string['show_more'] = 'Ver más...';
@@ -55,7 +57,6 @@ $string['addcourse'] = 'Crear un nuevo curso';
 $string['nohaycursos'] = 'No hay cursos que mostrar';
 $string['searchresult'] = '{$a->found} de {$a->total} libros';
 $string['searchempty'] = '{$a} libros';
-$string['create'] = 'Crear';
 $string['standardformat'] = 'Estándar de Moodle (por temas)';
 
 // Tabla libros
@@ -67,6 +68,10 @@ $string['actions'] = 'Acciones';
 $string['nobooksfound'] = 'No se han encontrado libros';
 
 // Crear el curs.
+$string['create'] = 'Crear';
+$string['format'] = 'Formato';
+$string['cancel'] = 'Cancelar';
+$string['createwarning'] = 'Este proceso puede tardar unos minutos.';
 $string['creatingcourse'] = 'Creando curso';
 $string['gotocourse'] = 'Ir al curso';
 $string['editingteachernotexist'] = "No se ha podido matricular al usuario: El rol 'editingteacher' no existe.";

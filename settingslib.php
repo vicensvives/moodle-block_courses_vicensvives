@@ -17,7 +17,7 @@
 require_once($CFG->libdir.'/adminlib.php');
 
 /**
- * Parámetro HTML para comprovar la conexión con el webservice de Vicens Vives.
+ * Parámetro falso para comprobar la configuración y mostrar errores.
  */
 class courses_vicensvives_setting_wscheck extends admin_setting {
 
@@ -36,22 +36,47 @@ class courses_vicensvives_setting_wscheck extends admin_setting {
     }
 
     public function output_html($data, $query='') {
+        $errors = array();
+
+        // Comprueba la conexión con el web service de Vicens Vives
         $ws = new vicensvives_ws();
         try {
             $ws->books();
         } catch (vicensvives_ws_error $e) {
-            return html_writer::tag('div', $e->getMessage(), array('class' => 'alert alert-error'));
+            $errors[] = html_writer::tag('div', $e->getMessage(), array('class' => 'alert alert-error'));
         }
-        return '';
+
+        // Comprueba si el plugin local del web service está instalado
+        if (!courses_vicensvives_setting_moodlews::get_service()) {
+            $message = get_string('moodlewsnotinstalled', 'block_courses_vicensvives');
+            $errors[] = html_writer::tag('div', $message, array('class' => 'alert alert-error'));
+        }
+
+        $adminroot = admin_get_root();
+
+        if (!$errors) {
+            // Comprueba si el web service está configurado
+            if (!courses_vicensvives_setting_moodlews::is_enabled()) {
+                $message = get_string('moodlewsnotenabled', 'block_courses_vicensvives');
+                $errors[] = html_writer::tag('div', $message, array('class' => 'alert alert-error'));
+            }
+
+            // Comprueba si ha habido un error en enviar el token
+            if (array_key_exists('s__vicensvives_moodlews', $adminroot->errors)) {
+                $message = $adminroot->errors['s__vicensvives_moodlews']->error;
+                $errors[] = html_writer::tag('div', $message, array('class' => 'alert alert-error'));
+            }
+        }
+
+        return implode('', $errors);
     }
 }
 
 /**
  * Parámetro para configurar el web service de Moodle y enviar el token a Vicens Vives.
  */
-class courses_vicensvives_setting_moodlews extends admin_setting_configcheckbox {
+class courses_vicensvives_setting_moodlews extends admin_setting {
 
-    const NAME = 'vicensvives_moodlews';
     const USERNAME = 'wsvicensvives';
     const FIRSTNAME = 'Web Service';
     const LASTNAME = 'Vicens Vives';
@@ -65,40 +90,33 @@ class courses_vicensvives_setting_moodlews extends admin_setting_configcheckbox 
         'moodle/grade:edit',
     );
 
-    public function __construct($visiblename, $description) {
-        parent::__construct(self::NAME, $visiblename, $description, '0', '1', '0');
+    public function __construct() {
+        parent::__construct('vicensvives_moodlews', '', '', null);
     }
 
     public function get_setting() {
-        // En versiones anteriores no se guardaba el estado del parámetro, pero se usaba un parámetro falso para indicar
-        // si se había configurado o no. Si existe migramos al nuevo parámetro.
-        if (get_config($this->plugin, $this->name . '_settingused') == '1') {
-            unset_config($this->name . '_settingused', $this->plugin);
-            $value = self::is_enabled() ? $this->yes : $this->no;
-            set_config($this->name, $value);
-            return $value;
-        }
-
         $value = get_config($this->plugin, $this->name);
-        if ($value == $this->yes and !self::is_enabled()) {
-            $value = $this->no;
+        if ($value === false) {
+            // Parámetro no configurado (en instalar)
+            return null;
         }
-        return $value;
+        return true;
+    }
+
+    public function output_html($data, $query='') {
+        $attributes = array('type' => 'hidden', 'name' => $this->get_full_name(),  'value' => '1');
+        return html_writer::empty_tag('input', $attributes);
     }
 
     public function write_setting($data) {
-        if ((string) $data === $this->yes) {
-            $error = self::enable();
-            if ($error !== '') {
-                $data = $this->no;
-            }
-        } else {
-            $error = self::disable();
+        // Marcamos el parámetro como configurado
+        set_config($this->name, '1', $this->plugin);
+
+        if (vicensvives_ws::configured() and courses_vicensvives_setting_moodlews::get_service()) {
+            return self::enable();
         }
 
-        set_config($this->name, $data, $this->plugin);
-
-        return $error;
+        return '';
     }
 
     public static function get_service() {
@@ -107,19 +125,54 @@ class courses_vicensvives_setting_moodlews extends admin_setting_configcheckbox 
         return $DB->get_record('external_services', $conditions);
     }
 
-    private static function disable() {
-        global $DB;
+    public static function is_enabled() {
+        global $CFG;
 
-        $service = self::get_service();
-        $userid = self::get_user_id();
-
-        // Elimina el token
-        if ($service and $userid) {
-            $conditions = array('externalserviceid' => $service->id, 'userid' => $userid);
-            $DB->delete_records('external_tokens', $conditions);
+        // Web services activados
+        if (empty($CFG->enablewebservices)) {
+            return false;
         }
 
-        return '';
+        // Protocolo REST
+        $protocols = explode(',', get_config('core', 'webserviceprotocols'));
+        if (!in_array(self::PROTOCOL, $protocols)) {
+            return false;
+        }
+
+        // Servicio activado
+        $service = self::get_service();
+        if (!$service or !$service->enabled) {
+            return false;
+        }
+
+        // Usuario
+        $userid = self::get_user_id();
+        if (!$userid) {
+            return false;
+        }
+
+        // Rol
+        $roleid = self::get_role_id();
+        if (!$roleid) {
+            return false;
+        }
+        $context = context_system::instance();
+        $rolecaps = role_context_capabilities($roleid, $context);
+        foreach (self::$capabilities as $name) {
+            if (!isset($rolecaps[$name]) or $rolecaps[$name] != CAP_ALLOW) {
+                return false;
+            }
+        }
+        if (!user_has_role_assignment($userid, $roleid, $context->id)) {
+            return false;
+        }
+
+        // Token
+        if (!self::get_token($service, $userid)) {
+            return false;
+        }
+
+        return true;
     }
 
     private static function enable() {
@@ -192,9 +245,7 @@ class courses_vicensvives_setting_moodlews extends admin_setting_configcheckbox 
             $ws = new vicensvives_ws();
             $ws->send_token($token);
         } catch (vicensvives_ws_error $e) {
-            if ($e->errorcode == 'wssitemismatch' or $e->errorcode == 'wsunknownerror') {
-                return $e->getMessage();
-            }
+            return $e->getMessage();
         }
 
         return '';
@@ -227,55 +278,5 @@ class courses_vicensvives_setting_moodlews extends admin_setting_configcheckbox 
             'deleted' => 0,
         );
         return $DB->get_field('user', 'id', $conditions);
-    }
-
-    private static function is_enabled() {
-        global $CFG;
-
-        // Web services activados
-        if (empty($CFG->enablewebservices)) {
-            return false;
-        }
-
-        // Protocolo REST
-        $protocols = explode(',', get_config('core', 'webserviceprotocols'));
-        if (!in_array(self::PROTOCOL, $protocols)) {
-            return false;
-        }
-
-        // Servicio activado
-        $service = self::get_service();
-        if (!$service or !$service->enabled) {
-            return false;
-        }
-
-        // Usuario
-        $userid = self::get_user_id();
-        if (!$userid) {
-            return false;
-        }
-
-        // Rol
-        $roleid = self::get_role_id();
-        if (!$roleid) {
-            return false;
-        }
-        $context = context_system::instance();
-        $rolecaps = role_context_capabilities($roleid, $context);
-        foreach (self::$capabilities as $name) {
-            if (!isset($rolecaps[$name]) or $rolecaps[$name] != CAP_ALLOW) {
-                return false;
-            }
-        }
-        if (!user_has_role_assignment($userid, $roleid, $context->id)) {
-            return false;
-        }
-
-        // Token
-        if (!self::get_token($service, $userid)) {
-            return false;
-        }
-
-        return true;
     }
 }

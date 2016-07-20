@@ -19,17 +19,16 @@ Parámetros de configuración
  * **Número de cursos**: Número de cursos que se muestra en el bloque.
  * **Categoría para cursos**: Categoría por defecto para los cursos de libros de
    Vicens Vives.
- * **Web service de Moodle**: Cconfigura el web service de Moodle y se
-   sincroniza el token con Vicens Vives.
 
-Se muestra un error si no se puede connectar con el web service de Vicens Vives.
+Se muestra un aviso si hay algun error en conectar con el web service de Vicens
+Vives o en configurar el web service de Moodle.
 
 Configuración del web service de Moodle
 ---------------------------------------
 
-En activar el parámetro de configuración **Web service de Moodle** se prepara
-Moodle para que desde Vicens Vives puedan llamar al web service del plugin
-local. Se realizan los pasos siguientes:
+En guardar los parámetros de configuración se prepara Moodle para que desde
+Vicens Vives puedan llamar al web service del plugin local. Se realizan los
+pasos siguientes:
 
  * Se habilitan los web services en Moodle.
  * Se habilita el protocolo REST.
@@ -39,9 +38,6 @@ local. Se realizan los pasos siguientes:
  * Se asigna el rol al usuario en contexto global.
  * Se genera un token para el usuario en el servicio Vicens Vives.
  * Se envía el token a Vicens Vives mediante una llamada a su web service.
-
-En desactivar el parámetro se elimina el token generado, pero el resto de la
-configuración se mantiene.
 
 Cliente del web service de Vicens Vives
 ---------------------------------------

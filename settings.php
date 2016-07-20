@@ -51,9 +51,5 @@ if ($ADMIN->fulltree) {
             get_string('defaultcategory', 'block_courses_vicensvives'),
             get_string('configdefaultcategory', 'block_courses_vicensvives'), 1));
 
-    if (courses_vicensvives_setting_moodlews::get_service()) {
-        $settings->add(new courses_vicensvives_setting_moodlews(
-            get_string('configmoodlews', 'block_courses_vicensvives'),
-            get_string('configmoodlewsdesc', 'block_courses_vicensvives')));
-    }
+    $settings->add(new courses_vicensvives_setting_moodlews());
 }

@@ -56,3 +56,9 @@ ul.vicensives_newunits {
 #page-blocks-courses_vicensvives-addbook .progress .bar {
     transition: none !important;
 }
+
+#page-blocks-courses_vicensvives-books #fitem_id_warning {
+    margin-top: 15px;
+    margin-bottom: 0;
+    font-weight: bold;
+}

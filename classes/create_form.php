@@ -45,9 +45,17 @@ class create_form extends \moodleform {
             'vv' => 'Vicens Vives',
             'topics' => get_string('standardformat', 'block_courses_vicensvives'),
         );
-        $mform->addElement('select', 'format', get_string('format'), $options);
+        $mform->addElement('select', 'format', get_string('format', 'block_courses_vicensvives'), $options);
         $mform->setType('format', PARAM_ALPHA);
 
-        $this->add_action_buttons(true, get_string('create', 'block_courses_vicensvives'));
+        $mform->addElement('static', 'warning', '', get_string('createwarning', 'block_courses_vicensvives'));
+
+        $buttonarray = array();
+        $label = get_string('create', 'block_courses_vicensvives');
+        $buttonarray[] = $mform->createElement('submit', 'submitbutton', $label);
+        $label = get_string('cancel', 'block_courses_vicensvives');
+        $buttonarray[] = $mform->createElement('cancel', 'cancel', $label);;
+        $mform->addGroup($buttonarray, 'buttonar', '', array(' '), false);
+        $mform->closeHeaderBefore('buttonar');
     }
 }

@@ -32,7 +32,7 @@ class vicensvives_ws {
     }
 
     public function books() {
-        $books = $this->call('get', 'books', array('own' => "false")) ?: array();
+        $books = $this->call('get', 'books', array('own' => "true")) ?: array();
 
         foreach ($books as $key => $book) {
             if (empty($book->idBook)) {
