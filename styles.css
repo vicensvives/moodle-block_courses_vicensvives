@@ -1,4 +1,6 @@
-.block_courses_vicensvives .footer {margin-top: 5px;}
+.block_courses_vicensvives .footer {
+    margin-top: 5px;
+}
 
 .vicensvives_courses  {
     padding: 20px;
@@ -57,8 +59,7 @@ ul.vicensives_newunits {
     transition: none !important;
 }
 
-#page-blocks-courses_vicensvives-books #fitem_id_warning {
-    margin-top: 15px;
-    margin-bottom: 0;
+.vicensvives_create_warning {
+    margin-top: 10px;
     font-weight: bold;
 }

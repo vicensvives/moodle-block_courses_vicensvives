@@ -112,7 +112,7 @@ class courses_vicensvives_setting_moodlews extends admin_setting {
         // Marcamos el parámetro como configurado
         set_config($this->name, '1', $this->plugin);
 
-        if (vicensvives_ws::configured() and courses_vicensvives_setting_moodlews::get_service()) {
+        if (vicensvives_ws::configured() and self::get_service()) {
             return self::enable();
         }
 

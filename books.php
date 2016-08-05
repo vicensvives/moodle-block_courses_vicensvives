@@ -124,32 +124,36 @@ if ($bookid = optional_param('create', false, PARAM_INT)) {
     exit;
 }
 
-$filteredbooks = array();
+$search = array(
+    'fullname' => optional_param('fullname', '', PARAM_TEXT),
+    'idsubject' => optional_param('idsubject', '', PARAM_INT),
+    'idlevel' => optional_param('idlevel', '', PARAM_INT),
+    'isbn' => optional_param('isbn', '', PARAM_TEXT),
+);
 
-$customdata = array('levels' => $levels, 'subjects' => $subjects);
+$customdata = array('levels' => $levels, 'subjects' => $subjects, 'search' => $search);
 $form = new \block_courses_vicensvives\filter_form(null, $customdata, 'get');
 
 if ($form->is_cancelled()) {
     redirect($baseurl);
-} else if ($data = $form->get_data()) {
+}
 
-    foreach ($allbooks as $book) {
-        if (!empty($data->fullname) and !str_contains($book->fullname, $data->fullname)) {
-            continue;
-        }
-        if (!empty($data->idSubject) and $book->idSubject != $data->idSubject) {
-            continue;
-        }
-        if (!empty($data->idlevel) and $book->idLevel != $data->idlevel) {
-            continue;
-        }
-        if (!empty($data->isbn) and !str_contains($book->isbn, $data->isbn)) {
-            continue;
-        }
-        $filteredbooks[$book->idBook] = $book;
+$filteredbooks = array();
+
+foreach ($allbooks as $book) {
+    if ($search['fullname'] and !str_contains($book->fullname, $search['fullname'])) {
+        continue;
     }
-} else {
-    $filteredbooks = $allbooks;
+    if ($search['idsubject'] and $book->idSubject != $search['idsubject']) {
+        continue;
+    }
+    if ($search['idlevel'] and $book->idLevel != $search['idlevel']) {
+        continue;
+    }
+    if ($search['isbn'] and !str_contains($book->isbn, $search['isbn'])) {
+        continue;
+    }
+    $filteredbooks[$book->idBook] = $book;
 }
 
 
@@ -167,7 +171,8 @@ if ($filteredbooks) {
 echo $OUTPUT->heading($string);
 
 $table = new flexible_table('vicensvives_books');
-$table->define_baseurl($baseurl);
+$url = new moodle_url($baseurl, $search);
+$table->define_baseurl($url);
 $table->define_columns(array('name', 'subject', 'level', 'isbn', 'actions'));
 $table->set_attribute('class', 'vicensvives_books');
 $table->column_class('actions', 'vicensvives_actions');

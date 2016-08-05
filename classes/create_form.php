@@ -48,7 +48,9 @@ class create_form extends \moodleform {
         $mform->addElement('select', 'format', get_string('format', 'block_courses_vicensvives'), $options);
         $mform->setType('format', PARAM_ALPHA);
 
-        $mform->addElement('static', 'warning', '', get_string('createwarning', 'block_courses_vicensvives'));
+        $text = get_string('createwarning', 'block_courses_vicensvives');
+        $content = \html_writer::div($text, 'vicensvives_create_warning');
+        $mform->addElement('static', 'warning', '', $content);
 
         $buttonarray = array();
         $label = get_string('create', 'block_courses_vicensvives');

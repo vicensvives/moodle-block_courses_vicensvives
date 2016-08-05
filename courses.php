@@ -70,6 +70,8 @@ if ($courseid = optional_param('update', false, PARAM_INT)) {
     echo html_writer::div("($link)", 'continuebutton');
 
     echo $OUTPUT->footer();
+
+    exit;
 }
 
 $fields = 'id, format, fullname, visible, summary, summaryformat';

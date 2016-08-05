@@ -28,25 +28,32 @@ class filter_form extends \moodleform {
         $mform = $this->_form;
         $levels = $this->_customdata['levels'];
         $subjects = $this->_customdata['subjects'];
+        $search = $this->_customdata['search'];
 
         $mform->addElement('header', 'search', get_string('search'));
-        $mform->setExpanded('search', false);
+        if (!$search['fullname'] and !$search['idsubject'] and !$search['idlevel'] and !$search['isbn']) {
+            $mform->setExpanded('search', false, true);
+        }
 
         $string = get_string('fullname', 'block_courses_vicensvives');
         $mform->addElement('text', 'fullname', $string);
         $mform->setType('fullname', PARAM_TEXT);
+        $mform->setDefault('fullname', $search['fullname']);
 
         $string = get_string('subject', 'block_courses_vicensvives');
-        $mform->addElement('select', 'idSubject', $string, $subjects);
-        $mform->setType('idSubject', PARAM_INT);
+        $mform->addElement('select', 'idsubject', $string, $subjects);
+        $mform->setType('idsubject', PARAM_INT);
+        $mform->setDefault('idsubject', $search['idsubject']);
 
         $string = get_string('level', 'block_courses_vicensvives');
         $mform->addElement('select', 'idlevel', $string, $levels);
         $mform->setType('idlevel', PARAM_INT);
+        $mform->setDefault('idlevel', $search['idlevel']);
 
         $string = get_string('isbn', 'block_courses_vicensvives');
         $mform->addElement('text', 'isbn', $string);
         $mform->setType('isbn', PARAM_TEXT);
+        $mform->setDefault('isbn', $search['isbn']);
 
         $buttonarray = array();
         $buttonarray[] = &$mform->createElement('submit', 'search', get_string('search'));
