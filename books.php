@@ -70,12 +70,25 @@ try {
         $allbooks[$book->idBook] = $book;
     }
 
+// Para el filtrado de allbooks para solo mostrar mis libros con licencia.
+    $licensesbooks = array();
+    foreach ($ws->licenses() as $license) {
+        $licensesbooks[$license->idBook] = $license;
+    }
+// Fin obtención de licencias para filtrado
+
 } catch (vicensvives_ws_error $e) {
     echo $OUTPUT->header();
     echo html_writer::tag('p', $e->getMessage(), array('class' => 'alert alert-danger'));
     echo $OUTPUT->footer();
     exit;
 }
+
+// Filtrar allbooks para solo mostrar mis lobros con licencia:
+
+$allbooks = array_intersect_key($allbooks, $licensesbooks);
+
+// Fin filtrado
 
 if ($bookid = optional_param('create', false, PARAM_INT)) {
     if (!isset($allbooks[$bookid])) {
