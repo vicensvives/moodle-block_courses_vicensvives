@@ -139,7 +139,9 @@ class courses_vicensvives_add_book {
         $sectionnum = 1;
         foreach ($this->book->units as $unit) {
             $mods = $this->get_section_mods($unit);
-
+print_object($unit);
+print_object($mods);
+//die;
             $sectionname = $unit->label . '. ' . $unit->name;
             $section = $this->setup_section($sectionnum, $sectionname, $mods);
 
@@ -260,6 +262,8 @@ class courses_vicensvives_add_book {
     }
 
     private function get_lti_mod($type, $element, $gradecat) {
+print_object($element);
+// die;
         $mod = array(
             'idnumber' => $this->book->idBook . '_' . $type . '_' . $element->id,
             'name' => $element->lti->activityName,
@@ -297,7 +301,9 @@ class courses_vicensvives_add_book {
     private function get_section_mods($unit) {
         $mods = array();
         $sectionnum = 0;
-
+        if (!isset($unit->sections) || empty($unit->sections)) {
+            return $mods;
+        }
         foreach ($unit->sections as $section) {
             $mods[] = array(
                 'idnumber' => $this->book->idBook . '_label_' . $section->id,
@@ -347,7 +353,20 @@ class courses_vicensvives_add_book {
                     $mods[] = $this->get_lti_mod('document', $document, $gradecat);
                 }
             }
-
+            if (!empty($section->videos)) {
+                foreach ($section->videos as $video) {
+                    $mods[] = $this->get_lti_mod('video', $video, $gradecat);
+                }
+            }
+            if (!empty($section->mauthors)) {
+                foreach ($section->mauthors as $mauthor) {
+                    $type = 'mauthor';
+                    if (isset($mauthor->mauthorType) && !empty($mauthor->mauthorType)) {
+                        $type .= strtolower(str_replace("_", '', $mauthor->mauthorType));
+                    }
+                    $mods[] = $this->get_lti_mod($type, $mauthor, $gradecat);
+                }
+            }
             $sectionnum++;
         }
 
@@ -359,6 +378,9 @@ class courses_vicensvives_add_book {
         $total += ($createcourse ? 1 : 0); // create course
         foreach ($this->book->units as $unit) {
             $total++; // setup section
+            if (!isset($unit->sections) || empty($unit->sections)) {
+                continue;
+            }
             foreach ($unit->sections as $section) {
                 $total++; // section label
                 if (!empty($section->lti)) {
@@ -367,6 +389,8 @@ class courses_vicensvives_add_book {
                 $total += count($section->questions);
                 $total += count($section->links);
                 $total += count($section->documents);
+                $total += count($section->videos);
+                $total += count($section->mauthors);
             }
         }
         $total++; // rebuild course cache
