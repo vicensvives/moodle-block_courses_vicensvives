@@ -139,9 +139,9 @@ class courses_vicensvives_add_book {
         $sectionnum = 1;
         foreach ($this->book->units as $unit) {
             $mods = $this->get_section_mods($unit);
-print_object($unit);
-print_object($mods);
-//die;
+// print_object($unit);
+// print_object($mods);
+// die;
             $sectionname = $unit->label . '. ' . $unit->name;
             $section = $this->setup_section($sectionnum, $sectionname, $mods);
 
@@ -262,7 +262,7 @@ print_object($mods);
     }
 
     private function get_lti_mod($type, $element, $gradecat) {
-print_object($element);
+// print_object($element);
 // die;
         $mod = array(
             'idnumber' => $this->book->idBook . '_' . $type . '_' . $element->id,
