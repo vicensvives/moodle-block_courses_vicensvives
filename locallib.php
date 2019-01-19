@@ -44,6 +44,8 @@ class courses_vicensvives_add_book {
 
     public static function create($bookid, $format, progress_bar $progress=null) {
         $addbook = new self($bookid, null, $progress);
+        // Debug.
+        // print_object($addbook->book);
         $courseid = $addbook->create_course($format);
         $addbook->create_course_content();
         return $courseid;
@@ -139,10 +141,19 @@ class courses_vicensvives_add_book {
         $sectionnum = 1;
         foreach ($this->book->units as $unit) {
             $mods = $this->get_section_mods($unit);
-// print_object($unit);
-// print_object($mods);
-// die;
-            $sectionname = $unit->label . '. ' . $unit->name;
+            // Name without label.
+            $sectionname = $unit->name;
+            if ($unit->label) {
+                $sectionname = $unit->label . '. ' . $sectionname;
+            }
+            // Debug.
+            // echo 'sectionnum: '.$sectionnum;
+            // echo '<br>sectionname: '.$sectionname;
+            // echo '<br>unit';
+            // print_object($unit);
+            // echo '<br>mods';
+            // print_object($mods);
+            // die;
             $section = $this->setup_section($sectionnum, $sectionname, $mods);
 
             $this->set_num_sections($sectionnum);
@@ -151,7 +162,9 @@ class courses_vicensvives_add_book {
             $gradecat = $this->setup_grade_category($coursegradecat, $idnumber, $section->name, $section->section, true);
 
             $this->update_progress();
-
+            // Debug.
+            // echo 'section';
+            // print_object($section);
             $this->create_section_content($section, $unit, $mods, $gradecat);
             $sectionnum++;
         }
@@ -203,6 +216,10 @@ class courses_vicensvives_add_book {
         foreach ($mods as $mod) {
             $cm = $this->get_cm($mod, $section);
             if ($cm) {
+                // Debug.
+                // print_object($mods);
+                // print_object($cm);
+                // die;
                 // Actualizamos idnumber si ha cambiado (etiquetas y enlaces creadas con una versión anterior)
                 if ($cm->idnumber != $mod['idnumber']) {
                     $DB->set_field('course_modules', 'idnumber', $mod['idnumber'], array('id' => $cm->id));
@@ -262,8 +279,9 @@ class courses_vicensvives_add_book {
     }
 
     private function get_lti_mod($type, $element, $gradecat) {
-// print_object($element);
-// die;
+        // Debug.
+        // print_object($element);
+        // die;
         $mod = array(
             'idnumber' => $this->book->idBook . '_' . $type . '_' . $element->id,
             'name' => $element->lti->activityName,
@@ -305,13 +323,18 @@ class courses_vicensvives_add_book {
             return $mods;
         }
         foreach ($unit->sections as $section) {
+            // Name without label.
+            $name = s($section->name);
+            if ($section->label) {
+                $name = s($section->label) . '. ' . s($section->name);
+            }
             $mods[] = array(
                 'idnumber' => $this->book->idBook . '_label_' . $section->id,
-                'name' => s($section->label) . '. ' . s($section->name),
+                'name' => $name,
                 'modname' => 'label',
                 'indent' => 0,
                 'params' => array(
-                    'intro' => html_writer::tag('h4', s($section->label) . '. ' . s($section->name)),
+                    'intro' => html_writer::tag('h4', $name),
                     'introformat' => FORMAT_HTML,
                 ),
                 'gradecat' => null,
@@ -319,7 +342,7 @@ class courses_vicensvives_add_book {
 
             $gradecat = array(
                 'idnumber' => $this->book->idBook . '_label_' . $section->id,
-                'name' => s($section->label) . '. ' . s($section->name),
+                'name' => $name,
                 'position' => $sectionnum,
             );
 
@@ -518,6 +541,7 @@ class courses_vicensvives_add_book {
         $section = null;
 
         // Búsqueda de la sección basada en los elementos ya creados
+        // Durena En actualizaciones de elementos vincula secciones.
         if ($mods) {
             $idnumbers = array();
             foreach ($mods as $mod) {
@@ -525,6 +549,10 @@ class courses_vicensvives_add_book {
             }
 
             list($idnumbersql, $params) = $DB->get_in_or_equal($idnumbers, SQL_PARAMS_NAMED);
+            // Debug.
+            // echo "<br>idnumbersql:$idnumbersql";
+            // print_object($params);
+
             $sql = "SELECT s.*
                     FROM {course_modules} cm
                     JOIN {course_sections} s ON s.id = cm.section
@@ -534,12 +562,16 @@ class courses_vicensvives_add_book {
                     ORDER BY s.section";
             $params['courseid'] = $this->course->id;
             $sections = $DB->get_records_sql($sql, $params, 0, 1);
-
+            // Debug.
+            // echo "<br>sections:";
+            // print_object($sections);
             if ($sections) {
                 $section = reset($sections);
             }
         }
-
+        // Debug.
+        // echo "<br>LOL section:";
+        // print_object($section);
         // No existe ningún elemento, buscamos la primera sección vacía
         if (!$section) {
             $sections = $DB->get_records('course_sections', array('course' => $this->course->id), 'section');
