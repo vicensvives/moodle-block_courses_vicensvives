@@ -90,7 +90,7 @@ class courses_vicensvives_add_book {
         }
 
         $addbook = new self($bookid, $course, $progress);
-        $addbook->create_course_content();
+        $addbook->create_course_content(true); //update = true;
 
         return $addbook->updatedunits;
     }
@@ -135,12 +135,15 @@ class courses_vicensvives_add_book {
         return $this->course->id;
     }
 
-    private function create_course_content() {
+    private function create_course_content($update = false) {
         $coursegradecat = grade_category::fetch_course_category($this->course->id);
 
         $sectionnum = 1;
         foreach ($this->book->units as $unit) {
             $mods = $this->get_section_mods($unit);
+            // Debug.
+            // print_object($unit);
+            // print_object($mods);
             // Name without label.
             $sectionname = $unit->name;
             if ($unit->label) {
@@ -154,7 +157,7 @@ class courses_vicensvives_add_book {
             // echo '<br>mods';
             // print_object($mods);
             // die;
-            $section = $this->setup_section($sectionnum, $sectionname, $mods);
+            $section = $this->setup_section($sectionnum, $sectionname, $mods, $update);
 
             $this->set_num_sections($sectionnum);
 
@@ -165,7 +168,7 @@ class courses_vicensvives_add_book {
             // Debug.
             // echo 'section';
             // print_object($section);
-            $this->create_section_content($section, $unit, $mods, $gradecat);
+            $this->create_section_content($section, $unit, $mods, $gradecat, $update);
             $sectionnum++;
         }
 
@@ -205,7 +208,7 @@ class courses_vicensvives_add_book {
         return $fromform->coursemodule;
     }
 
-    private function create_section_content($section, $unit, $mods, $gradecat) {
+    private function create_section_content($section, $unit, $mods, $gradecat, $update = false) {
         global $DB;
 
         $roleid = $DB->get_field('role', 'id', array('shortname' => 'user'));
@@ -215,25 +218,51 @@ class courses_vicensvives_add_book {
 
         foreach ($mods as $mod) {
             $cm = $this->get_cm($mod, $section);
-            if ($cm) {
+            if ($update && $cm) {
                 // Debug.
-                // print_object($mods);
+                // echo 'mod:';
+                // print_object($mod);
+                // print_object($section);
+                // echo 'cm:';
                 // print_object($cm);
                 // die;
                 // Actualizamos idnumber si ha cambiado (etiquetas y enlaces creadas con una versión anterior)
+                $needupdate = false;
+
                 if ($cm->idnumber != $mod['idnumber']) {
+                    $needupdate = true;
                     $DB->set_field('course_modules', 'idnumber', $mod['idnumber'], array('id' => $cm->id));
+                }
+                $module = $DB->get_record($mod['modname'], array('id' => $cm->instance));
+                // Debug.
+                // echo 'module:';
+                // print_object($module);
+
+                if ($module->name != $mod['name']) {
+                    $needupdate = true;
+                    $module->name = $mod['name'];
+                }
+                foreach ($mod['params'] as $key => $value) {
+                    if ($module->$key != $value) {
+                        $needupdate = true;
+                        $module->$key = $value;
+                    }
+                }
+                if (!$needupdate) {
+                    // Mantenemos timemmodified como última actualización.
+                    $DB->set_field($mod['modname'], 'timemodified', time(), array('id' => $module->id));
+                } else {
+                    $module->timemodified = time();
+                    $DB->update_record($mod['modname'], $module);
                 }
 
                 $prevmod = $cm->id;
                 $sortgradeitem = false;
-
             } else {
                 $transaction = $DB->start_delegated_transaction();
 
                 // Nueva actividad
                 $cmid = $this->create_mod($mod, $section);
-
                 // Añade a la sección
                 if ($prevmod) {
                     $index = array_search($prevmod, $sequence);
@@ -272,10 +301,24 @@ class courses_vicensvives_add_book {
         $conditions = array(
             'course' => $this->course->id,
             'idnumber' => $mod['idnumber'],
-            'deletioninprogress' => 0,
+            'section' => $section->id,
+            'deletioninprogress' => 0
         );
 
-        return $DB->get_record('course_modules', $conditions);
+        $cms = $DB->get_records('course_modules', $conditions);
+
+        if (count($cms) == 1) {
+            return array_shift($cms);
+        } else {
+            foreach ($cms as $cm) {
+                // vemos si se ha actualizado en el proceso, para permitir repeticiones.
+                $module = $DB->get_record($mod['modname'], array('id' => $cm->instance));
+                if ($module->timemodified < (time()-60)) {
+                    return $cm;
+                }
+            }
+        }
+        return false;
     }
 
     private function get_lti_mod($type, $element, $gradecat) {
@@ -535,43 +578,35 @@ class courses_vicensvives_add_book {
         }
     }
 
-    private function setup_section($sectionnum, $name, array $mods=null) {
+    private function setup_section($sectionnum, $name, array $mods = null, $update = false) {
         global $DB;
 
         $section = null;
 
         // Búsqueda de la sección basada en los elementos ya creados
-        // Durena En actualizaciones de elementos vincula secciones.
-        if ($mods) {
+        // Durena FIX: sólo si update porque en actualizaciones de elementos vincula secciones.
+
+        if ($mods && $update) {
             $idnumbers = array();
             foreach ($mods as $mod) {
-                $idnumbers[] = $mod['idnumber'];
+                break;
             }
-
-            list($idnumbersql, $params) = $DB->get_in_or_equal($idnumbers, SQL_PARAMS_NAMED);
-            // Debug.
-            // echo "<br>idnumbersql:$idnumbersql";
-            // print_object($params);
-
             $sql = "SELECT s.*
                     FROM {course_modules} cm
-                    JOIN {course_sections} s ON s.id = cm.section
-                    WHERE cm.course = :courseid
-                    AND cm.idnumber $idnumbersql
-                    AND cm.deletioninprogress = 0
-                    ORDER BY s.section";
+                    JOIN {course_sections} s
+                    WHERE s.id = cm.section
+                    AND cm.course = :courseid
+                    AND cm.idnumber = :idnumber
+                    AND cm.deletioninprogress = 0";
             $params['courseid'] = $this->course->id;
-            $sections = $DB->get_records_sql($sql, $params, 0, 1);
-            // Debug.
-            // echo "<br>sections:";
-            // print_object($sections);
+            $params['idnumber'] = $mod['idnumber'];
+            $sections = $DB->get_records_sql($sql, $params);
+
             if ($sections) {
                 $section = reset($sections);
             }
         }
-        // Debug.
-        // echo "<br>LOL section:";
-        // print_object($section);
+
         // No existe ningún elemento, buscamos la primera sección vacía
         if (!$section) {
             $sections = $DB->get_records('course_sections', array('course' => $this->course->id), 'section');
