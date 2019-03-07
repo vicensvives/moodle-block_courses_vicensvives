@@ -613,12 +613,16 @@ class courses_vicensvives_add_book {
             $nextsectionnum = 1;
             foreach ($sections as $section) {
                 $nextsectionnum = $section->section + 1;
-                if ($section->section > 0 and $section->sequence == '') {
+                // Validamos el nombre de la sección y no la secuencia,
+                // al estar vacía la sección,la secuencia queda en blanco.
+                if ($section->section > 0 and $section->name == '') {
                     break;
                 }
             }
             // Si no existe ninguna sección vacía, creamos una nueva
-            if (!$section or $section->section == 0 or $section->sequence != '') {
+            // Validamos el nombre de la sección y no la secuencia,
+            // al estar vacía la sección,la secuencia queda en blanco.
+            if (!$section or $section->section == 0 or $section->name != '') {
                 $section = new stdClass();
                 $section->course = $this->course->id;
                 $section->section = $nextsectionnum;
