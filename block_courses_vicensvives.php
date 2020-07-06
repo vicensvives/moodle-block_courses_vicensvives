@@ -119,6 +119,10 @@ class block_courses_vicensvives extends block_list {
     }
 
     function applicable_formats() {
-        return array('all' => false,'site' => true);
+        return array(
+            'all' => false,
+            'site' => true,
+            'my'=> true
+        );
     }
 }
