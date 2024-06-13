@@ -38,7 +38,7 @@ class webservice_called extends \core\event\base {
             $info = substr($info, 0, 252) . '...';
         }
 
-        return array($this->courseid, 'vicensvives', 'webservice', $this->other['script'], $info);
+        return [$this->courseid, 'vicensvives', 'webservice', $this->other['script'], $info];
     }
 
     private function get_info() {
